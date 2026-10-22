@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cible de fléchettes — scoreur HTML</title>
+<style>
+:root{color-scheme:dark;--bg:#101318;--panel:#1b2028;--line:#343c48;--text:#f4f6f8;--muted:#aeb7c4;--accent:#e5b94d;--red:#d71920;--green:#00843d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+header{padding:18px 20px;border-bottom:1px solid var(--line);background:#151920;position:sticky;top:0;z-index:3}
+h1{font-size:clamp(20px,3vw,28px);margin:0}header p{margin:4px 0 0;color:var(--muted)}
+main{max-width:1300px;margin:auto;padding:18px;display:grid;grid-template-columns:minmax(300px,1.05fr) minmax(300px,.95fr);gap:18px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}
+h2{font-size:18px;margin:0 0 12px}h3{font-size:15px;margin:18px 0 8px}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:10px}
+input,select,button{font:inherit;border-radius:8px;border:1px solid #46505f;padding:10px;background:#11151b;color:var(--text);width:100%}
+button{cursor:pointer;background:#29313d;font-weight:650}button:hover{filter:brightness(1.15)}button.primary{background:var(--accent);color:#171717;border-color:var(--accent)}button.danger{background:#52272a;border-color:#824147}
+button:disabled{opacity:.45;cursor:not-allowed}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}.actions button{width:auto;flex:1}
+.muted,.help{color:var(--muted);font-size:13px}.status{padding:9px 11px;border-radius:8px;background:#11151b;border:1px solid var(--line);margin:10px 0}
+.scores{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin:12px 0}
+.player{padding:12px;border:1px solid var(--line);border-radius:10px;background:#141820}.player.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.player .name{font-size:13px;color:var(--muted);overflow-wrap:anywhere}.player .score{font-size:clamp(32px,5vw,46px);font-weight:800;line-height:1.2;font-variant-numeric:tabular-nums}.player .small{font-size:12px;color:var(--muted)}
+.target-wrap{max-width:640px;margin:0 auto}.target-wrap svg{display:block;width:100%;height:auto;touch-action:manipulation}
+.sector{cursor:pointer;stroke:#111;stroke-width:1.2}.sector:hover{stroke:#ffe28a;stroke-width:3;filter:brightness(1.2)}
+.bull{cursor:pointer;stroke:#111;stroke-width:1.5}.bull:hover{stroke:#ffe28a;stroke-width:3}
+.dart-buttons{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.dart{padding:9px 4px;text-align:center;border:1px solid var(--line);border-radius:9px;background:#11151b}.dart b{display:block;font-size:18px}
+.dart button{margin-top:6px;padding:6px;font-size:12px}
+.list{display:grid;gap:8px}.match-card,.history-row{border:1px solid var(--line);border-radius:9px;padding:10px;background:#141820}
+.match-card.current{border-color:var(--accent)}.match-head{display:flex;justify-content:space-between;gap:8px;align-items:center}.tag{font-size:11px;color:#161616;background:var(--accent);padding:3px 7px;border-radius:99px;white-space:nowrap}
+hr{border:0;border-top:1px solid var(--line);margin:16px 0}
+#toast{min-height:20px;color:#f1d27c;font-size:13px;margin-top:8px}
+@media(max-width:850px){main{grid-template-columns:1fr;padding:10px}.panel{padding:12px}header{position:static}.target-wrap{max-width:560px}}
+
+nav{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+nav button{width:auto;min-width:110px}
+nav button.active{background:var(--accent);color:#171717;border-color:var(--accent)}
+main{max-width:1300px;margin:auto;padding:18px;display:block}
+.page{display:none}.page.active{display:block}
+.setup-layout,.game-layout{display:grid;grid-template-columns:minmax(280px,1fr) minmax(280px,1fr);gap:18px}
+@media(max-width:850px){.setup-layout,.game-layout{grid-template-columns:1fr}}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<header><h1>Scoreur de fléchettes</h1><p>Fichier HTML autonome · fonctionne sur cet appareil, sans serveur ni connexion Internet</p>
+<nav aria-label="Menu principal">
+<button class="active" data-page="setupPage">Préparation</button>
+<button data-page="gamePage">Cible & score</button>
+<button data-page="resultsPage">Résultats</button>
+</nav></header>
+<main>
+<div id="setupPage" class="page active">
+<div class="setup-layout">
+<section class="panel">
+  <h2>Réglages du match</h2>
+  <div class="grid2">
+    <label>Joueur 1<input id="p1" value="Joueur 1" maxlength="40"></label>
+    <label>Joueur 2<input id="p2" value="Joueur 2" maxlength="40"></label>
+    <label>Score de départ<select id="start"><option>101</option><option>201</option><option>301</option><option selected>501</option><option>701</option><option>1001</option></select></label>
+    <label>Double In<select id="doubleIn"><option value="no" selected>Non</option><option value="yes">Oui</option></select></label>
+    <label>Double Out<select id="doubleOut"><option value="yes" selected>Oui</option><option value="no">Non</option></select></label>
+    <label>Nombre de manches à gagner<select id="format">
+      <option value="1">1 manche</option>
+      <option value="2">2 manches (meilleur des 3)</option>
+      <option value="3" selected>3 manches (meilleur des 5)</option>
+      <option value="4">4 manches (meilleur des 7)</option>
+      <option value="5">5 manches (meilleur des 9)</option>
+      <option value="6">6 manches (meilleur des 11)</option>
+      <option value="7">7 manches (meilleur des 13)</option>
+      <option value="8">8 manches (meilleur des 15)</option>
+      <option value="9">9 manches (meilleur des 17)</option>
+      <option value="10">10 manches (meilleur des 19)</option>
+      <option value="custom">Personnalisé…</option>
+    </select></label>
+    <label id="customLegsLabel" class="hidden">Manches à gagner (personnalisé)<input id="customLegs" type="number" min="1" max="99" value="11"></label>
+  </div>
+  <div class="actions"><button class="primary" id="newMatch">Démarrer / nouveau match</button><button id="saveMatch">Enregistrer dans la liste</button></div>
+  <p class="help">Les doubles et triples comptent 2× et 3×. En Double Out, il faut finir exactement à zéro sur un double. En Double In, le score ne commence à diminuer qu'après un double.</p>
+  <div id="matchStatus" class="status">Configure les joueurs puis démarre un match.</div>
+</section>
+<section class="panel">
+<h2>Avant de commencer</h2>
+<ol>
+<li>Choisis les noms des deux joueurs.</li>
+<li>Choisis le score de départ, le Double In et le Double Out.</li>
+<li>Choisis le format du match et clique sur « Démarrer / nouveau match ».</li>
+<li>Ouvre ensuite « Cible & score » pour jouer.</li>
+</ol>
+<p class="status">Aucun serveur nécessaire. Les scores sont conservés sur cet appareil uniquement.</p>
+</section>
+</div>
+</div>
+<div id="gamePage" class="page">
+<div class="game-layout">
+<section class="panel">
+  <h2>Cible interactive</h2>
+  <p class="help">Clique sur une zone de la cible. Les couleurs sont celles d'une cible classique : noir/blanc, rouge/vert, bull vert et centre rouge.</p>
+  <div class="target-wrap"><svg id="target" viewBox="0 0 500 500" aria-label="Cible de fléchettes interactive"></svg></div>
+  <div class="grid3" style="margin-top:10px">
+    <button id="miss">Raté (0)</button><button id="singleBull">Bull extérieur (25)</button><button id="bullseye">Centre (50)</button>
+  </div>
+</section>
+<section class="panel"><h2>Score en cours</h2>  <div class="scores">
+    <div id="player0" class="player"><div class="name" id="name0">Joueur 1</div><div class="score" id="score0">501</div><div class="small" id="legs0">Manches : 0</div></div>
+    <div style="font-weight:800;color:var(--muted)">VS</div>
+    <div id="player1" class="player"><div class="name" id="name1">Joueur 2</div><div class="score" id="score1">501</div><div class="small" id="legs1">Manches : 0</div></div>
+  </div>
+  <div class="grid2">
+    <div><div class="muted">Joueur actif</div><strong id="activeName">Joueur 1</strong></div>
+    <div><div class="muted">Total de la volée</div><strong id="turnTotal">0</strong></div>
+  </div>
+  <div class="dart-buttons" id="dartButtons">
+    <div class="dart" id="dart0">Fléchette 1<b>—</b></div>
+    <div class="dart" id="dart1">Fléchette 2<b>—</b></div>
+    <div class="dart" id="dart2">Fléchette 3<b>—</b></div>
+  </div>
+  <div class="actions" style="margin-top:12px"><button id="undo">Annuler dernier tir</button><button class="primary" id="endTurn">Valider la volée</button><button class="danger" id="reset">Réinitialiser le match</button></div>
+  <div id="toast" role="status"></div>
+</section>
+</div>
+</div>
+<div id="resultsPage" class="page">
+<section class="panel">  <h2>Matchs enregistrés sur cet appareil</h2>
+  <div class="actions"><button id="clearSaved" class="danger">Effacer la liste</button><button id="export">Exporter les résultats CSV</button></div>
+  <p class="help">La liste reste enregistrée dans le navigateur de cet appareil. Elle n'est pas partagée avec d'autres appareils.</p>
+  <div id="savedMatches" class="list"></div>
+  <h3>Historique du match courant</h3><div id="history" class="list"></div>
+</section>
+</div>
+</main>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const order = [20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
+const state = {
+  names:['Joueur 1','Joueur 2'], start:501, doubleIn:false, doubleOut:true, format:'legs',
+  scores:[501,501], active:0, darts:[], opened:[true,true], legs:[0,0], history:[],
+  saved:[], finished:false, winner:null, legNo:1, matchStarted:false, pendingLegWin:null
+};
+function settingsFromForm(){
+ state.names=[$('p1').value.trim()||'Joueur 1',$('p2').value.trim()||'Joueur 2'];
+ state.start=Number($('start').value);state.doubleIn=$('doubleIn').value==='yes';
+ state.doubleOut=$('doubleOut').value==='yes';state.format=$('format').value;
+}
+function legsNeeded(){
+ if(state.format==='custom') return Math.max(1,Math.min(99,Number($('customLegs').value)||1));
+ const n=Number(state.format);
+ return Number.isFinite(n)&&n>=1?n:1;
+}
+function freshLeg(){
+ state.scores=[state.start,state.start];state.active=0;state.darts=[];
+ state.opened=[!state.doubleIn,!state.doubleIn];state.finished=false;state.winner=null;state.turnSnapshot=null;state.pendingLegWin=null;
+}
+function startMatch(){settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;freshLeg();$('toast').textContent='Nouveau match démarré.';render()}
+function sectorPath(cx,cy,r1,r2,a1,a2){
+ const p=a=>({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)});
+ function point(rad,a){return {x:cx+rad*Math.cos(a),y:cy+rad*Math.sin(a)}}
+ const A=point(r2,a1),B=point(r2,a2),C=point(r1,a2),D=point(r1,a1);
+ const large=a2-a1>Math.PI?1:0;
+ return `M ${A.x} ${A.y} A ${r2} ${r2} 0 ${large} 1 ${B.x} ${B.y} L ${C.x} ${C.y} A ${r1} ${r1} 0 ${large} 0 ${D.x} ${D.y} Z`;
+}
+function addCircle(svg,cx,cy,r,fill,cls,fn,label){
+ const el=document.createElementNS('http://www.w3.org/2000/svg','circle');
+ el.setAttribute('cx',cx);el.setAttribute('cy',cy);el.setAttribute('r',r);el.setAttribute('fill',fill);
+ if(cls)el.setAttribute('class',cls);if(label)el.setAttribute('aria-label',label);
+ if(fn){el.style.cursor='pointer';el.addEventListener('click',fn)}
+ svg.appendChild(el);return el;
+}
+function drawTarget(){
+ const svg=$('target');svg.innerHTML='';
+ const ns='http://www.w3.org/2000/svg';
+ const bg=document.createElementNS(ns,'circle');bg.setAttribute('cx',250);bg.setAttribute('cy',250);bg.setAttribute('r',238);bg.setAttribute('fill','#090a0c');bg.setAttribute('stroke','#aeb4bd');bg.setAttribute('stroke-width','3');svg.appendChild(bg);
+ const cx=250,cy=250;const radii={outer:222,doubleOuter:205,tripleInner:124,tripleOuter:139,innerBull:17,outerBull:32};
+ for(let i=0;i<20;i++){
+   const a0=(-90+i*18-9)*Math.PI/180, a1=(-90+i*18+9)*Math.PI/180;
+   const n=order[i], redGreen=i%2===0;
+   const segments=[
+     [radii.doubleOuter,radii.outer,redGreen?'#d71920':'#00843d','D'],
+     [radii.tripleOuter,radii.doubleOuter,redGreen?'#171717':'#f2f2f0','S'],
+     [radii.tripleInner,radii.tripleOuter,redGreen?'#d71920':'#00843d','T'],
+     [radii.outerBull,radii.tripleInner,redGreen?'#171717':'#f2f2f0','S'],
+   ];
+   for(const [r1,r2,col,mult] of segments){
+     const path=document.createElementNS(ns,'path');
+     path.setAttribute('d',sectorPath(cx,cy,r1,r2,a0,a1));path.setAttribute('fill',col);path.setAttribute('class','sector');
+     path.setAttribute('aria-label',`${mult==='D'?'Double':mult==='T'?'Triple':'Simple'} ${n}`);
+     path.addEventListener('click',()=>recordDart(n,mult));svg.appendChild(path);
+   }
+   const mid=(-90+i*18)*Math.PI/180, tx=cx+231*Math.cos(mid),ty=cy+231*Math.sin(mid);
+   const t=document.createElementNS(ns,'text');t.setAttribute('x',tx);t.setAttribute('y',ty+5);t.setAttribute('text-anchor','middle');t.setAttribute('font-size','17');t.setAttribute('font-weight','800');t.setAttribute('fill','#fff');t.textContent=n;svg.appendChild(t);
+ }
+ addCircle(svg,cx,cy,radii.outerBull,'#00843d','bull',()=>recordBull(25,false),'Bull extérieur 25');
+ addCircle(svg,cx,cy,radii.innerBull,'#d71920','bull',()=>recordBull(50,true),'Centre 50');
+}
+function recordDart(n,mult){
+ const factor=mult==='D'?2:mult==='T'?3:1;
+ addDart({label:(mult==='S'?'S':mult)+n,score:n*factor,double:mult==='D',mult,n});
+}
+function recordBull(value,center){addDart({label:center?'Bull 50':'Bull 25',score:value,double:center,mult:center?'BULL':'OUTERBULL',n:value})}
+function ensureTurnSnapshot(){
+ if(!state.turnSnapshot){
+  state.turnSnapshot={
+   player:state.active,
+   score:state.scores[state.active],
+   opened:state.opened[state.active],
+   dartsBefore:state.darts.length,
+   historyLength:state.history.length
+  };
+ }
+}
+function addDart(d){
+ if(!state.matchStarted||state.finished){$('toast').textContent='Démarre un match avant de lancer les fléchettes.';return}
+ if(state.pendingLegWin!==null && state.pendingLegWin!==undefined){$('toast').textContent='Valide d’abord la volée avec le bouton « Valider la volée ». ';return}
+ if(state.darts.length>=3){$('toast').textContent='Trois fléchettes déjà lancées.';return}
+ ensureTurnSnapshot();
+ const p=state.active;
+ const before=state.scores[p];
+ let opened=state.opened[p];
+ let counted=0;
+ let label=d.label;
+ if(!opened){
+  if(d.double){opened=true;counted=d.score;state.opened[p]=true;}
+  else label += ' (non comptée)';
+ } else {
+  counted=d.score;
+ }
+ state.darts.push({...d,displayLabel:label,counted});
+ if(opened && counted){
+  const after=before-counted;
+  const invalid=after<0||(state.doubleOut&&after===1)||(after===0&&state.doubleOut&&!d.double);
+  if(invalid){
+   // Bust: undo all score changes from this visit, then pass to the other player.
+   const snap=state.turnSnapshot;
+   state.scores[p]=snap.score;
+   state.opened[p]=snap.opened;
+   state.history.unshift({
+    player:state.names[p],playerIndex:p,darts:state.darts.map(x=>x.displayLabel),
+    total:state.darts.reduce((a,x)=>a+x.counted,0),before:snap.score,after:snap.score,status:'BUST',
+    leg:state.legNo,turn:state.history.length+1
+   });
+   state.darts=[];
+   state.active=1-p;
+   state.turnSnapshot=null;
+   $('toast').textContent='BUST : score de la volée annulé. Tour de '+state.names[state.active]+'.';
+   render();return;
+  }
+  state.scores[p]=after;
+  if(after===0){
+   state.pendingLegWin=p;
+   $('toast').textContent=`${state.names[p]} est à zéro. Clique sur « Valider la volée » pour confirmer la manche.`;
+   render();return;
+  }
+ }
+ $('toast').textContent=`${label} : ${d.score} point${d.score>1?'s':''} décompté${d.score>1?'s':''}.`;
+ if(state.darts.length===3){
+  $('toast').textContent='Trois fléchettes lancées : vérifie le score puis clique sur « Valider la volée » pour passer au joueur suivant.';
+ }
+ render();
+}
+function snapScoreForTurn(p){
+ return state.turnSnapshot && state.turnSnapshot.player===p ? state.turnSnapshot.score : state.scores[p];
+}
+function completeTurn(message){
+ if(!state.darts.length)return;
+ const p=state.active;
+ const snap=state.turnSnapshot||{score:state.scores[p],opened:state.opened[p]};
+ const counted=state.darts.reduce((a,d)=>a+(d.counted||0),0);
+ const labels=state.darts.map(d=>d.displayLabel||d.label);
+ const status=(!snap.opened&&!state.opened[p])?'DOUBLE IN non atteint':'OK';
+ state.history.unshift({
+  player:state.names[p],playerIndex:p,darts:labels,total:counted,before:snap.score,
+  after:state.scores[p],status,leg:state.legNo,turn:state.history.length+1
+ });
+ state.darts=[];state.turnSnapshot=null;
+ state.active=1-p;
+ $('toast').textContent=message+' Tour de '+state.names[state.active]+'.';
+ render();
+}
+function evaluateTurn(){
+ if(state.pendingLegWin!==null && state.pendingLegWin!==undefined){
+  const p=state.pendingLegWin;
+  const snap=state.turnSnapshot||{score:state.start};
+  state.history.unshift({
+   player:state.names[p],playerIndex:p,darts:state.darts.map(x=>x.displayLabel||x.label),
+   total:state.darts.reduce((a,x)=>a+(x.counted||0),0),
+   before:snap.score,after:0,status:'OK',leg:state.legNo,turn:state.history.length+1
+  });
+  state.darts=[];state.turnSnapshot=null;state.pendingLegWin=null;
+  state.legs[p]++;
+  if(state.legs[p]>=legsNeeded()){
+   state.finished=true;state.winner=state.names[p];
+   $('toast').textContent=`${state.winner} remporte le match.`;
+  }else{
+   state.legNo++;freshLeg();
+   $('toast').textContent=`Manche validée par ${state.names[p]}. Manche suivante.`;
+  }
+  render();return;
+ }
+ if(!state.darts.length){$('toast').textContent='Aucune fléchette à valider.';return}
+ completeTurn('Volée validée manuellement.');
+}
+function undo(){
+ if(!state.darts.length){$('toast').textContent='Aucune fléchette à annuler dans la volée en cours.';return}
+ const p=state.active;
+ const removed=state.darts.pop();
+ const snap=state.turnSnapshot;
+ if(!snap){$('toast').textContent='Impossible d’annuler ce tir.';render();return}
+ // Recalculate the current visit from its start, preserving Double-In rules.
+ state.scores[p]=snap.score;
+ state.opened[p]=snap.opened;
+ const remaining=[...state.darts];
+ state.darts=[];
+ for(const d of remaining){
+  let counted=0;
+  let opened=state.opened[p];
+  let displayLabel=d.label;
+  if(!opened){
+   if(d.double){opened=true;counted=d.score;state.opened[p]=true}
+   else displayLabel+=' (non comptée)';
+  } else counted=d.score;
+  state.darts.push({...d,displayLabel,counted});
+  if(counted)state.scores[p]-=counted;
+ }
+ $('toast').textContent='Dernière fléchette annulée : '+(removed.displayLabel||removed.label)+'.';
+ render();
+}
+function render(){
+ for(let p=0;p<2;p++){
+  $('name'+p).textContent=state.names[p];$('score'+p).textContent=state.scores[p];
+  $('legs'+p).textContent=`Manches : ${state.legs[p]}`;
+  $('player'+p).classList.toggle('active',state.active===p&&!state.finished);
+ }
+ $('activeName').textContent=state.finished?`Match terminé — ${state.winner}`:state.names[state.active];
+ $('turnTotal').textContent=state.darts.reduce((a,d)=>a+d.score,0);
+ for(let i=0;i<3;i++){
+  const d=state.darts[i];$('dart'+i).innerHTML=`Fléchette ${i+1}<b>${d?(d.displayLabel||d.label)+' · '+d.score:'—'}</b>`;
+ }
+ $('matchStatus').textContent=!state.matchStarted?'Configure les joueurs puis démarre un match.':state.finished?`Terminé : ${state.winner} gagne ${state.legs[0]}–${state.legs[1]}.`: `Match en cours · Manche ${state.legNo} · Premier à ${legsNeeded()} manche(s) · ${state.doubleIn?'Double In':'Simple In'} · ${state.doubleOut?'Double Out':'Sortie libre'}`;
+ renderHistory();renderSaved();
+}
+function renderHistory(){
+ const el=$('history');el.innerHTML='';
+ if(!state.history.length){el.innerHTML='<div class="muted">Aucune volée enregistrée.</div>';return}
+ state.history.slice(0,15).forEach(t=>{
+  const div=document.createElement('div');div.className='history-row';
+  div.innerHTML=`<strong>${escapeHtml(t.player)}</strong> · ${t.darts.map(escapeHtml).join(', ')}<div class="muted">${t.status} · ${t.before} → ${t.after} · volée : ${t.total}</div>`;
+  el.appendChild(div);
+ });
+}
+function getSaved(){try{return JSON.parse(localStorage.getItem('dartsSavedMatches')||'[]')}catch{return []}}
+function renderSaved(){
+ state.saved=getSaved();const el=$('savedMatches');el.innerHTML='';
+ if(!state.saved.length){el.innerHTML='<div class="muted">Aucun résultat enregistré.</div>';return}
+ state.saved.slice().reverse().forEach((m,idx)=>{
+  const div=document.createElement('div');div.className='match-card';
+  div.innerHTML=`<div class="match-head"><strong>${escapeHtml(m.names[0])} ${m.legs[0]}–${m.legs[1]} ${escapeHtml(m.names[1])}</strong><span class="tag">${escapeHtml(m.winner||'En cours')}</span></div><div class="muted">${escapeHtml(m.date)} · départ ${m.start} · ${m.doubleIn?'Double In':'Simple In'} · ${m.doubleOut?'Double Out':'Sortie libre'}</div>`;
+  el.appendChild(div);
+ });
+}
+function saveMatch(){
+ const record={names:[...state.names],legs:[...state.legs],winner:state.winner||null,start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,date:new Date().toLocaleString('fr-BE'),history:[...state.history]};
+ const saved=getSaved();saved.push(record);localStorage.setItem('dartsSavedMatches',JSON.stringify(saved));$('toast').textContent='Résultat enregistré sur cet appareil.';renderSaved();
+}
+function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function showPage(pageId){document.querySelectorAll('nav [data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===pageId));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===pageId));}
+document.querySelectorAll('nav [data-page]').forEach(btn=>btn.addEventListener('click',()=>showPage(btn.dataset.page)));
+$('format').addEventListener('change',()=>{
+ $('customLegsLabel').classList.toggle('hidden',$('format').value!=='custom');
+});
+$('newMatch').addEventListener('click',startMatch);
+$('saveMatch').addEventListener('click',saveMatch);
+$('miss').addEventListener('click',()=>addDart({label:'Raté',score:0,double:false,mult:'S',n:0}));
+$('singleBull').addEventListener('click',()=>recordBull(25,false));
+$('bullseye').addEventListener('click',()=>recordBull(50,true));
+$('endTurn').addEventListener('click',evaluateTurn);
+$('undo').addEventListener('click',undo);
+$('reset').addEventListener('click',()=>{if(confirm('Réinitialiser le match en cours ?')){settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;freshLeg();$('toast').textContent='Match réinitialisé.';render()}});
+$('clearSaved').addEventListener('click',()=>{if(confirm('Effacer tous les résultats enregistrés sur cet appareil ?')){localStorage.removeItem('dartsSavedMatches');renderSaved()}});
+$('export').addEventListener('click',()=>{
+ const saved=getSaved();if(!saved.length){$('toast').textContent='Aucun résultat à exporter.';return}
+ const rows=[['Date','Joueur 1','Manches J1','Joueur 2','Manches J2','Vainqueur','Départ','Double In','Double Out'],...saved.map(m=>[m.date,m.names[0],m.legs[0],m.names[1],m.legs[1],m.winner||'',m.start,m.doubleIn?'oui':'non',m.doubleOut?'oui':'non'])];
+ const csv=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
+ const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='resultats_flechettes.csv';a.click();URL.revokeObjectURL(url);
+});
+drawTarget();freshLeg();render();
+})();
+</script>
+</body>
+</html>
