@@ -42,6 +42,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 .setup-layout,.game-layout{display:grid;grid-template-columns:minmax(280px,1fr) minmax(280px,1fr);gap:18px}
 @media(max-width:850px){.setup-layout,.game-layout{grid-template-columns:1fr}}
 .hidden{display:none!important}
+#authControls{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px}#authControls label{margin:0;min-width:180px;flex:1}#authControls button{width:auto}#appShell.readonly #target{pointer-events:none;opacity:.72}#appShell.readonly .write-control{opacity:.55}
 
 .access-screen{min-height:100vh;display:grid;place-items:center;padding:20px;background:radial-gradient(circle at top,#252c37,#101318 55%)}
 .access-card{width:min(100%,480px);padding:24px;background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:0 18px 60px #0005}
@@ -68,12 +69,19 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
     </label>
     <button id="accessButton" class="primary" type="button">Ouvrir la planche</button>
     <p id="accessMessage" role="status" aria-live="polite" style="min-height:20px;margin:8px 0 0;color:#f1d27c;font-size:13px"></p>
-    <p class="access-warning">Version de préparation : chaque planche garde son historique séparé sur cet appareil. La synchronisation entre appareils sera ajoutée ensuite.</p>
+    <p class="access-warning">Consultation publique : les scores sont visibles sans connexion. Seul l’organisateur connecté peut modifier les matchs.</p>
   </div>
 </section>
 <div id="appShell" class="hidden">
 
 <header><h1>Scoreur de fléchettes</h1><p>Score en direct · synchronisation en ligne entre appareils</p><div id="cloudStatus" class="status" role="status">Connexion à la base en cours…</div>
+<div id="authControls">
+  <label id="emailLabel">E-mail organisateur<input id="organizerEmail" type="email" autocomplete="username" placeholder="Adresse e-mail"></label>
+  <label id="passwordLabel">Mot de passe<input id="organizerPassword" type="password" autocomplete="current-password" placeholder="Mot de passe"></label>
+  <button id="loginButton" type="button">Connexion organisateur</button>
+  <button id="logoutButton" type="button" class="hidden">Déconnexion</button>
+  <span id="authStatus" class="muted">Mode consultation</span>
+</div>
 <nav aria-label="Menu principal">
 <button class="active" data-page="overviewPage">Vue des planches</button><button data-page="setupPage">Préparation</button>
 <button data-page="gamePage">Cible & score</button>
@@ -86,7 +94,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 <div id="overviewPage" class="page active">
 <section class="panel"><h2>Récapitulatif en direct des 8 planches</h2><p class="help">Les états affichés ici sont partagés avec les autres appareils connectés au site.</p><div id="liveBoards" class="list"><div class="muted">Chargement des planches…</div></div></section>
 </div>
-<div id="setupPage" class="page active">
+<div id="setupPage" class="page">
 <div class="setup-layout">
 <section class="panel">
   <h2>Réglages du match</h2>
@@ -194,6 +202,15 @@ $('accessButton').addEventListener('click',()=>{
   $('accessMessage').textContent = '';
   showApp();
   showPage('setupPage');
+  const row = remoteBoards[String(activeBoard)];
+  if (row?.match_state?.names) {
+    applyCloudSnapshot(row.match_state);
+  } else {
+    state.names=['Joueur 1','Joueur 2']; state.start=501; state.doubleIn=false; state.doubleOut=true; state.format='3';
+    state.history=[]; state.legs=[0,0]; state.matchStarted=false; state.legNo=1; state.finished=false; state.winner=null;
+    $('p1').value=state.names[0]; $('p2').value=state.names[1]; $('start').value='501'; $('doubleIn').value='no'; $('doubleOut').value='yes'; $('format').value='3';
+    freshLeg(); render();
+  }
   renderSaved();
   window.scrollTo(0, 0);
 });
@@ -215,8 +232,18 @@ const state = {
 const SUPABASE_URL = 'https://irgsmmsnsxzbjgzjpaus.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_XPdvVF6ci7_p7GApfH880A_7mbp3h5c';
 const supabase = window.supabase?.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-let cloudReady = false, applyingRemote = false, saveTimer = null, channel = null;
+let cloudReady = false, applyingRemote = false, saveTimer = null, channel = null, isOrganizer = false;
 let remoteBoards = {};
+function setOrganizerUI() {
+  const shell=$('appShell');
+  shell.classList.toggle('readonly',!isOrganizer);
+  ['p1','p2','start','doubleIn','doubleOut','format','customLegs','newMatch','saveMatch','miss','singleBull','bullseye','undo','endTurn','reset','clearSaved'].forEach(id=>{const el=$(id);if(el)el.disabled=!isOrganizer;});
+  $('loginButton').classList.toggle('hidden',isOrganizer);
+  $('logoutButton').classList.toggle('hidden',!isOrganizer);
+  $('emailLabel').classList.toggle('hidden',isOrganizer);
+  $('passwordLabel').classList.toggle('hidden',isOrganizer);
+  $('authStatus').textContent=isOrganizer?'Organisateur connecté — modification autorisée':'Mode consultation — connexion organisateur requise pour modifier';
+}
 function cloudMessage(msg, ok=false) {
   const el = $('cloudStatus');
   if (el) { el.textContent = msg; el.style.color = ok ? '#8fe0a7' : '#f1d27c'; }
@@ -249,7 +276,9 @@ async function loadBoardStates() {
   const {data,error}=await supabase.from('dart_boards').select('board_number,match_state,updated_at').order('board_number');
   if(error){cloudMessage('Lecture Supabase impossible : '+error.message);return;}
   remoteBoards={}; (data||[]).forEach(row=>remoteBoards[String(row.board_number)]=row);
-  renderLiveBoards(); cloudReady=true; cloudMessage('Connecté à Supabase · synchronisation activée',true);
+  renderLiveBoards(); cloudReady=true;
+  if(activeBoard && remoteBoards[String(activeBoard)]?.match_state?.names) applyCloudSnapshot(remoteBoards[String(activeBoard)].match_state);
+  cloudMessage('Connecté à Supabase · lecture en direct activée',true);
 }
 function renderLiveBoards() {
   const el=$('liveBoards'); if(!el)return; el.innerHTML='';
@@ -268,11 +297,11 @@ function renderLiveBoards() {
   }));
 }
 async function saveBoardState() {
-  if(!supabase||!activeBoard||applyingRemote||!cloudReady)return;
+  if(!supabase||!activeBoard||applyingRemote||!cloudReady||!isOrganizer)return;
   const {error}=await supabase.from('dart_boards').update({match_state:snapshotForCloud(),updated_at:new Date().toISOString()}).eq('board_number',Number(activeBoard));
   if(error)cloudMessage('Écriture refusée par Supabase : '+error.message);
 }
-function queueCloudSave(){if(applyingRemote||!activeBoard||!cloudReady)return;clearTimeout(saveTimer);saveTimer=setTimeout(saveBoardState,300);}
+function queueCloudSave(){if(applyingRemote||!activeBoard||!cloudReady||!isOrganizer)return;clearTimeout(saveTimer);saveTimer=setTimeout(saveBoardState,300);}
 function startRealtime(){
   if(!supabase)return; if(channel)supabase.removeChannel(channel);
   channel=supabase.channel('dart-boards-live').on('postgres_changes',{event:'*',schema:'public',table:'dart_boards'},payload=>{
@@ -280,7 +309,23 @@ function startRealtime(){
     if(String(row.board_number)===String(activeBoard)&&row.match_state?.names&&!applyingRemote)applyCloudSnapshot(row.match_state);
   }).subscribe(status=>{if(status==='SUBSCRIBED')cloudMessage('Connecté à Supabase · mises à jour en direct',true);});
 }
-if(supabase){loadBoardStates().then(()=>startRealtime());setInterval(loadBoardStates,15000);}else cloudMessage('Impossible de charger Supabase.');
+if(supabase){
+  loadBoardStates().then(()=>startRealtime());
+  setInterval(loadBoardStates,15000);
+  supabase.auth.getSession().then(({data})=>{isOrganizer=!!data?.session;setOrganizerUI();});
+  supabase.auth.onAuthStateChange((_event,session)=>{isOrganizer=!!session;setOrganizerUI();cloudMessage(isOrganizer?'Organisateur connecté · modification autorisée':'Lecture publique active · connexion requise pour modifier',true);if(isOrganizer&&activeBoard&&cloudReady)loadBoardStates();});
+}else cloudMessage('Impossible de charger Supabase.');
+$('loginButton').addEventListener('click',async()=>{
+  if(!supabase){$('authStatus').textContent='Supabase ne se charge pas.';return;}
+  const email=$('organizerEmail').value.trim(),password=$('organizerPassword').value;
+  if(!email||!password){$('authStatus').textContent='Entre ton e-mail et ton mot de passe.';return;}
+  $('loginButton').disabled=true;$('authStatus').textContent='Connexion en cours…';
+  const {error}=await supabase.auth.signInWithPassword({email,password});
+  $('loginButton').disabled=false;
+  if(error){$('authStatus').textContent='Connexion refusée : '+error.message;return;}
+  $('organizerPassword').value='';
+});
+$('logoutButton').addEventListener('click',async()=>{if(supabase){const {error}=await supabase.auth.signOut();if(error)$('authStatus').textContent='Erreur de déconnexion : '+error.message;}});
 
 function settingsFromForm(){
  state.names=[$('p1').value.trim()||'Joueur 1',$('p2').value.trim()||'Joueur 2'];
@@ -296,7 +341,7 @@ function freshLeg(){
  state.scores=[state.start,state.start];state.active=0;state.darts=[];
  state.opened=[!state.doubleIn,!state.doubleIn];state.finished=false;state.winner=null;state.turnSnapshot=null;state.pendingLegWin=null;
 }
-function startMatch(){settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;freshLeg();$('toast').textContent='Nouveau match démarré.';render()}
+function startMatch(){if(!isOrganizer){$('toast').textContent='Connexion organisateur requise pour modifier les scores.';return;}settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;freshLeg();$('toast').textContent='Nouveau match démarré.';render()}
 function sectorPath(cx,cy,r1,r2,a1,a2){
  const p=a=>({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)});
  function point(rad,a){return {x:cx+rad*Math.cos(a),y:cy+rad*Math.sin(a)}}
@@ -503,6 +548,7 @@ function renderSaved(){
  });
 }
 function saveMatch(){
+ if(!isOrganizer){$('toast').textContent='Connexion organisateur requise pour enregistrer un résultat.';return;}
  const record={names:[...state.names],legs:[...state.legs],winner:state.winner||null,start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,date:new Date().toLocaleString('fr-BE'),history:[...state.history]};
  const saved=getSaved();saved.push(record);try{localStorage.setItem(savedStorageKey(),JSON.stringify(saved));$('toast').textContent='Résultat enregistré puis synchronisé dès que possible.';}catch(e){$('toast').textContent='Le navigateur bloque le stockage local : le résultat ne peut pas être conservé.';}renderSaved();
 }
@@ -519,15 +565,15 @@ $('singleBull').addEventListener('click',()=>recordBull(25,false));
 $('bullseye').addEventListener('click',()=>recordBull(50,true));
 $('endTurn').addEventListener('click',evaluateTurn);
 $('undo').addEventListener('click',undo);
-$('reset').addEventListener('click',()=>{if(confirm('Réinitialiser le match en cours ?')){settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;freshLeg();$('toast').textContent='Match réinitialisé.';render()}});
-$('clearSaved').addEventListener('click',()=>{if(confirm('Effacer tous les résultats enregistrés sur cet appareil ?')){try{localStorage.removeItem(savedStorageKey())}catch(e){}renderSaved()}});
+$('reset').addEventListener('click',()=>{if(!isOrganizer){$('toast').textContent='Connexion organisateur requise.';return;}if(confirm('Réinitialiser le match en cours ?')){settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;freshLeg();$('toast').textContent='Match réinitialisé.';render()}});
+$('clearSaved').addEventListener('click',()=>{if(!isOrganizer){$('toast').textContent='Connexion organisateur requise.';return;}if(confirm('Effacer tous les résultats enregistrés sur cet appareil ?')){try{localStorage.removeItem(savedStorageKey())}catch(e){}renderSaved()}});
 $('export').addEventListener('click',()=>{
  const saved=getSaved();if(!saved.length){$('toast').textContent='Aucun résultat à exporter.';return}
  const rows=[['Date','Joueur 1','Manches J1','Joueur 2','Manches J2','Vainqueur','Départ','Double In','Double Out'],...saved.map(m=>[m.date,m.names[0],m.legs[0],m.names[1],m.legs[1],m.winner||'',m.start,m.doubleIn?'oui':'non',m.doubleOut?'oui':'non'])];
  const csv=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='resultats_flechettes.csv';a.click();URL.revokeObjectURL(url);
 });
-drawTarget();freshLeg();render();renderLiveBoards();
+drawTarget();freshLeg();render();renderLiveBoards();setOrganizerUI();
 })();
 </script>
 </body>
