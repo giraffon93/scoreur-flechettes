@@ -158,7 +158,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
     <div class="dart" id="dart1">Fléchette 2<b>—</b></div>
     <div class="dart" id="dart2">Fléchette 3<b>—</b></div>
   </div>
-  <div class="actions" style="margin-top:12px"><button id="undo">Annuler dernier tir</button><button class="primary" id="endTurn">Valider la volée</button><button class="danger" id="reset">Réinitialiser le match</button></div>
+  <div class="actions" style="margin-top:12px"><button id="undo">Annuler dernier tir</button><button class="primary" id="endTurn">Valider la volée</button><button class="danger" id="finishMatch">Terminer le match</button><button class="danger" id="reset">Réinitialiser le match</button></div>
   <div id="toast" role="status"></div>
 </section>
 </div>
@@ -520,12 +520,12 @@ function render(){
   $('legs'+p).textContent=`Manches : ${state.legs[p]}`;
   $('player'+p).classList.toggle('active',state.active===p&&!state.finished);
  }
- $('activeName').textContent=state.finished?`Match terminé — ${state.winner}`:state.names[state.active];
+ $('activeName').textContent=state.finished?`Match terminé${state.winner?' — '+state.winner:''}`:state.names[state.active];
  $('turnTotal').textContent=state.darts.reduce((a,d)=>a+d.score,0);
  for(let i=0;i<3;i++){
   const d=state.darts[i];$('dart'+i).innerHTML=`Fléchette ${i+1}<b>${d?(d.displayLabel||d.label)+' · '+d.score:'—'}</b>`;
  }
- $('matchStatus').textContent=!state.matchStarted?'Configure les joueurs puis démarre un match.':state.finished?`Terminé : ${state.winner} gagne ${state.legs[0]}–${state.legs[1]}.`: `Match en cours · Manche ${state.legNo} · Premier à ${legsNeeded()} manche(s) · ${state.doubleIn?'Double In':'Simple In'} · ${state.doubleOut?'Double Out':'Sortie libre'}`;
+ $('matchStatus').textContent=!state.matchStarted?'Configure les joueurs puis démarre un match.':state.finished?(state.winner?`Terminé : ${state.winner} gagne ${state.legs[0]}–${state.legs[1]}.`:`Match terminé manuellement · Score ${state.legs[0]}–${state.legs[1]}.`): `Match en cours · Manche ${state.legNo} · Premier à ${legsNeeded()} manche(s) · ${state.doubleIn?'Double In':'Simple In'} · ${state.doubleOut?'Double Out':'Sortie libre'}`;
  renderHistory();renderSaved();renderLiveBoards();queueCloudSave();
 }
 function renderHistory(){
@@ -543,13 +543,13 @@ function renderSaved(){
  if(!state.saved.length){el.innerHTML='<div class="muted">Aucun résultat enregistré.</div>';return}
  state.saved.slice().reverse().forEach((m,idx)=>{
   const div=document.createElement('div');div.className='match-card';
-  div.innerHTML=`<div class="match-head"><strong>${escapeHtml(m.names[0])} ${m.legs[0]}–${m.legs[1]} ${escapeHtml(m.names[1])}</strong><span class="tag">${escapeHtml(m.winner||'En cours')}</span></div><div class="muted">${escapeHtml(m.date)} · départ ${m.start} · ${m.doubleIn?'Double In':'Simple In'} · ${m.doubleOut?'Double Out':'Sortie libre'}</div>`;
+  div.innerHTML=`<div class="match-head"><strong>${escapeHtml(m.names[0])} ${m.legs[0]}–${m.legs[1]} ${escapeHtml(m.names[1])}</strong><span class="tag">${escapeHtml(m.winner||(m.finished?'Terminé':'En cours'))}</span></div><div class="muted">${escapeHtml(m.date)} · départ ${m.start} · ${m.doubleIn?'Double In':'Simple In'} · ${m.doubleOut?'Double Out':'Sortie libre'}</div>`;
   el.appendChild(div);
  });
 }
 function saveMatch(){
  if(!isOrganizer){$('toast').textContent='Connexion organisateur requise pour enregistrer un résultat.';return;}
- const record={names:[...state.names],legs:[...state.legs],winner:state.winner||null,start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,date:new Date().toLocaleString('fr-BE'),history:[...state.history]};
+ const record={names:[...state.names],legs:[...state.legs],winner:state.winner||null,finished:state.finished,start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,date:new Date().toLocaleString('fr-BE'),history:[...state.history]};
  const saved=getSaved();saved.push(record);try{localStorage.setItem(savedStorageKey(),JSON.stringify(saved));$('toast').textContent='Résultat enregistré puis synchronisé dès que possible.';}catch(e){$('toast').textContent='Le navigateur bloque le stockage local : le résultat ne peut pas être conservé.';}renderSaved();
 }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -564,6 +564,16 @@ $('miss').addEventListener('click',()=>addDart({label:'Raté',score:0,double:fal
 $('singleBull').addEventListener('click',()=>recordBull(25,false));
 $('bullseye').addEventListener('click',()=>recordBull(50,true));
 $('endTurn').addEventListener('click',evaluateTurn);
+$('finishMatch').addEventListener('click',()=>{
+ if(!state.matchStarted){$('toast').textContent='Aucun match à terminer.';return;}
+ if(state.finished){$('toast').textContent='Le match est déjà terminé.';return;}
+ if(confirm('Terminer ce match maintenant ? Il apparaîtra comme terminé dans la vue des planches.')){
+  state.finished=true;
+  state.winner=state.legs[0]===state.legs[1]?null:(state.legs[0]>state.legs[1]?state.names[0]:state.names[1]);
+  $('toast').textContent='Match terminé manuellement.';
+  render();
+ }
+});
 $('undo').addEventListener('click',undo);
 $('reset').addEventListener('click',()=>{if(!isOrganizer){$('toast').textContent='Connexion organisateur requise.';return;}if(confirm('Réinitialiser le match en cours ?')){settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;freshLeg();$('toast').textContent='Match réinitialisé.';render()}});
 $('clearSaved').addEventListener('click',()=>{if(!isOrganizer){$('toast').textContent='Connexion organisateur requise.';return;}if(confirm('Effacer tous les résultats enregistrés sur cet appareil ?')){try{localStorage.removeItem(savedStorageKey())}catch(e){}renderSaved()}});
