@@ -30,6 +30,20 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .dart button{margin-top:6px;padding:6px;font-size:12px}
 .list{display:grid;gap:8px}.match-card,.history-row{border:1px solid var(--line);border-radius:9px;padding:10px;background:#141820}
 .match-card.current{border-color:var(--accent)}.match-head{display:flex;justify-content:space-between;gap:8px;align-items:center}.tag{font-size:11px;color:#161616;background:var(--accent);padding:3px 7px;border-radius:99px;white-space:nowrap}
+/* Tableau général compact : 4 colonnes x 2 lignes sur grand écran */
+#boardFilters{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px}
+#boardFilters label{display:flex;align-items:center;gap:5px;margin:0;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#141820;color:var(--text);font-size:13px}
+#boardFilters input{width:auto;margin:0}
+#liveBoards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:stretch}
+#liveBoards .match-card{padding:10px;min-width:0;display:flex;flex-direction:column;gap:5px;font-size:13px}
+#liveBoards .match-head{align-items:flex-start;flex-direction:column;gap:5px}
+#liveBoards .match-head strong{font-size:14px;overflow-wrap:anywhere}
+#liveBoards .tag{align-self:flex-start}
+#liveBoards .actions{margin-top:auto!important}
+#liveBoards .actions button{padding:7px 5px;font-size:12px}
+@media(max-width:1000px){#liveBoards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){#liveBoards{grid-template-columns:1fr}}
+
 hr{border:0;border-top:1px solid var(--line);margin:16px 0}
 #toast{min-height:20px;color:#f1d27c;font-size:13px;margin-top:8px}
 @media(max-width:850px){main{grid-template-columns:1fr;padding:10px}.panel{padding:12px}header{position:static}.target-wrap{max-width:560px}}
@@ -92,7 +106,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 </header>
 <main>
 <div id="overviewPage" class="page active">
-<section class="panel"><h2>Récapitulatif en direct des 8 planches</h2><p class="help">Les états affichés ici sont partagés avec les autres appareils connectés au site.</p><div id="liveBoards" class="list"><div class="muted">Chargement des planches…</div></div></section>
+<section class="panel"><h2>Récapitulatif des planches</h2><p class="help">Sélectionne les planches à afficher. Ton choix est conservé sur cet ordinateur et ne change pas les données des matchs.</p><div id="boardFilters" aria-label="Sélection des planches"></div><div class="actions" style="margin-bottom:12px"><button type="button" id="selectAllBoards">Tout sélectionner</button><button type="button" id="selectNoBoards">Tout décocher</button></div><div id="liveBoards" class="list"><div class="muted">Chargement des planches…</div></div><p id="boardSelectionCount" class="help" aria-live="polite"></p></section>
 </div>
 <div id="setupPage" class="page">
 <div class="setup-layout">
@@ -179,8 +193,10 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 'use strict';
 const $ = id => document.getElementById(id);
 const boardNames = {'1':'Planche 1','2':'Planche 2','3':'Planche 3','4':'Planche 4','5':'Planche 5','6':'Planche 6','7':'Planche 7','8':'Planche 8'};
+// Au démarrage, afficher directement la vue d'ensemble.
+// Une planche est choisie en cliquant sur sa carte dans le récapitulatif.
 let activeBoard = '';
-try { activeBoard = sessionStorage.getItem('dartsActiveBoard') || ''; } catch (e) { activeBoard = ''; }
+try { sessionStorage.removeItem('dartsActiveBoard'); } catch (e) {}
 function savedStorageKey(){ return 'dartsSavedMatches_board_' + (activeBoard || 'none'); }
 function showAccess(){
   $('accessScreen').classList.remove('hidden');
@@ -217,11 +233,14 @@ $('accessButton').addEventListener('click',()=>{
 $('switchBoard').addEventListener('click',()=>{
   try { sessionStorage.removeItem('dartsActiveBoard'); } catch (e) {}
   activeBoard='';
-  $('accessMessage').textContent = '';
-  showAccess();
+  $('activeBoardLabel').textContent='—';
+  showApp();
+  showPage('overviewPage');
   window.scrollTo(0, 0);
 });
-if(activeBoard && boardNames[activeBoard]) showApp(); else showAccess();
+// Ne plus demander de choisir une planche au lancement : la vue d'ensemble est l'accueil.
+showApp();
+showPage('overviewPage');
 const order = [20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
 const state = {
   names:['Joueur 1','Joueur 2'], start:501, doubleIn:false, doubleOut:true, format:'legs',
@@ -280,9 +299,27 @@ async function loadBoardStates() {
   if(activeBoard && remoteBoards[String(activeBoard)]?.match_state?.names) applyCloudSnapshot(remoteBoards[String(activeBoard)].match_state);
   cloudMessage('Connecté à Supabase · lecture en direct activée',true);
 }
+const BOARD_FILTER_KEY='dartsOverviewSelectedBoards';
+function getSelectedOverviewBoards(){
+  try { const parsed=JSON.parse(localStorage.getItem(BOARD_FILTER_KEY)||'[1,2,3,4,5,6,7,8]'); if(Array.isArray(parsed)) return parsed.map(Number).filter(n=>n>=1&&n<=8); } catch(e) {}
+  return [1,2,3,4,5,6,7,8];
+}
+function setSelectedOverviewBoards(values){
+  const clean=[...new Set(values.map(Number).filter(n=>Number.isInteger(n)&&n>=1&&n<=8))];
+  try { localStorage.setItem(BOARD_FILTER_KEY,JSON.stringify(clean)); } catch(e) {}
+  renderBoardFilters(); renderLiveBoards();
+}
+function renderBoardFilters(){
+  const el=$('boardFilters'); if(!el)return; const selected=getSelectedOverviewBoards(); el.innerHTML='';
+  for(let n=1;n<=8;n++){ const label=document.createElement('label'); const cb=document.createElement('input'); cb.type='checkbox'; cb.value=String(n); cb.checked=selected.includes(n); cb.addEventListener('change',()=>{const next=getSelectedOverviewBoards();setSelectedOverviewBoards(cb.checked?[...next,n]:next.filter(x=>x!==n));}); label.append(cb,document.createTextNode('Planche '+n)); el.appendChild(label); }
+  const count=$('boardSelectionCount'); if(count)count.textContent=selected.length+' planche'+(selected.length===1?'':'s')+' affichée'+(selected.length===1?'':'s')+'.';
+}
+$('selectAllBoards')?.addEventListener('click',()=>setSelectedOverviewBoards([1,2,3,4,5,6,7,8]));
+$('selectNoBoards')?.addEventListener('click',()=>setSelectedOverviewBoards([]));
 function renderLiveBoards() {
-  const el=$('liveBoards'); if(!el)return; el.innerHTML='';
-  for(let n=1;n<=8;n++){
+  const el=$('liveBoards'); if(!el)return; el.innerHTML=''; const selected=getSelectedOverviewBoards();
+  if(!selected.length){el.innerHTML='<div class="muted">Aucune planche sélectionnée. Coche une ou plusieurs planches ci-dessus.</div>';renderBoardFilters();return;}
+  for(const n of selected){
     const row=remoteBoards[String(n)],d=row?.match_state||{},inProgress=!!d.matchStarted&&!d.finished;
     const status=!d.matchStarted?'Aucun match en cours':d.finished?'Match terminé':`En cours · ${d.scores?.[0]??'—'} – ${d.scores?.[1]??'—'}`;
     const names=Array.isArray(d.names)?d.names:['Joueur 1','Joueur 2'];
@@ -290,6 +327,7 @@ function renderLiveBoards() {
     card.innerHTML=`<div class="match-head"><strong>Planche ${n} · ${escapeHtml(names[0])} / ${escapeHtml(names[1])}</strong><span class="tag">${inProgress?'EN COURS':d.finished?'TERMINÉ':'LIBRE'}</span></div><div>${escapeHtml(status)}</div><div class="muted">${d.legs?`Manches : ${d.legs[0]||0} – ${d.legs[1]||0}`:''}${row?.updated_at?' · Mis à jour : '+new Date(row.updated_at).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):''}</div><div class="actions" style="margin-top:8px"><button type="button" data-open-board="${n}">Ouvrir cette planche</button></div>`;
     el.appendChild(card);
   }
+  renderBoardFilters();
   el.querySelectorAll('[data-open-board]').forEach(btn=>btn.addEventListener('click',()=>{
     activeBoard=btn.dataset.openBoard; try{sessionStorage.setItem('dartsActiveBoard',activeBoard)}catch(e){}
     showApp(); showPage('setupPage'); const row=remoteBoards[String(activeBoard)];
@@ -583,7 +621,7 @@ $('export').addEventListener('click',()=>{
  const csv=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='resultats_flechettes.csv';a.click();URL.revokeObjectURL(url);
 });
-drawTarget();freshLeg();render();renderLiveBoards();setOrganizerUI();
+drawTarget();freshLeg();render();renderBoardFilters();renderLiveBoards();setOrganizerUI();
 })();
 </script>
 </body>
