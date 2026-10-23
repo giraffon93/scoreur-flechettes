@@ -73,9 +73,9 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 </section>
 <div id="appShell" class="hidden">
 
-<header><h1>Scoreur de fléchettes</h1><p>Fichier HTML autonome · fonctionne sur cet appareil, sans serveur ni connexion Internet</p>
+<header><h1>Scoreur de fléchettes</h1><p>Score en direct · synchronisation en ligne entre appareils</p><div id="cloudStatus" class="status" role="status">Connexion à la base en cours…</div>
 <nav aria-label="Menu principal">
-<button class="active" data-page="setupPage">Préparation</button>
+<button class="active" data-page="overviewPage">Vue des planches</button><button data-page="setupPage">Préparation</button>
 <button data-page="gamePage">Cible & score</button>
 <button data-page="resultsPage">Résultats</button>
 </nav>
@@ -83,6 +83,9 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 <button id="switchBoard" type="button" style="width:auto;margin-top:10px">Changer de planche</button>
 </header>
 <main>
+<div id="overviewPage" class="page active">
+<section class="panel"><h2>Récapitulatif en direct des 8 planches</h2><p class="help">Les états affichés ici sont partagés avec les autres appareils connectés au site.</p><div id="liveBoards" class="list"><div class="muted">Chargement des planches…</div></div></section>
+</div>
 <div id="setupPage" class="page active">
 <div class="setup-layout">
 <section class="panel">
@@ -153,15 +156,16 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 </div>
 </div>
 <div id="resultsPage" class="page">
-<section class="panel">  <h2>Matchs enregistrés sur cet appareil</h2>
+<section class="panel">  <h2>Matchs enregistrés</h2>
   <div class="actions"><button id="clearSaved" class="danger">Effacer la liste</button><button id="export">Exporter les résultats CSV</button></div>
-  <p class="help">La liste reste enregistrée dans le navigateur de cet appareil. Elle n'est pas partagée avec d'autres appareils.</p>
+  <p class="help">Les résultats sont synchronisés avec Supabase et partagés entre les appareils.</p>
   <div id="savedMatches" class="list"></div>
   <h3>Historique du match courant</h3><div id="history" class="list"></div>
 </section>
 </div>
 </main>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 (() => {
 'use strict';
@@ -207,6 +211,77 @@ const state = {
   scores:[501,501], active:0, darts:[], opened:[true,true], legs:[0,0], history:[],
   saved:[], finished:false, winner:null, legNo:1, matchStarted:false, pendingLegWin:null
 };
+// Connexion Supabase avec la clé publishable (jamais une clé secret/service_role).
+const SUPABASE_URL = 'https://irgsmmsnsxzbjgzjpaus.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_XPdvVF6ci7_p7GApfH880A_7mbp3h5c';
+const supabase = window.supabase?.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+let cloudReady = false, applyingRemote = false, saveTimer = null, channel = null;
+let remoteBoards = {};
+function cloudMessage(msg, ok=false) {
+  const el = $('cloudStatus');
+  if (el) { el.textContent = msg; el.style.color = ok ? '#8fe0a7' : '#f1d27c'; }
+}
+function snapshotForCloud() {
+  settingsFromForm();
+  return {names:[...state.names],start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,format:state.format,
+    scores:[...state.scores],active:state.active,darts:state.darts,opened:[...state.opened],legs:[...state.legs],history:state.history,
+    finished:state.finished,winner:state.winner,legNo:state.legNo,matchStarted:state.matchStarted,saved:getSaved()};
+}
+function applyCloudSnapshot(data) {
+  if (!data || typeof data !== 'object' || !Array.isArray(data.names)) return;
+  applyingRemote = true;
+  try {
+    state.names=data.names; state.start=Number(data.start)||501; state.doubleIn=!!data.doubleIn; state.doubleOut=!!data.doubleOut;
+    state.format=String(data.format||'3'); state.scores=Array.isArray(data.scores)?data.scores:[state.start,state.start];
+    state.active=Number(data.active)||0; state.darts=Array.isArray(data.darts)?data.darts:[];
+    state.opened=Array.isArray(data.opened)?data.opened:[true,true]; state.legs=Array.isArray(data.legs)?data.legs:[0,0];
+    state.history=Array.isArray(data.history)?data.history:[]; state.finished=!!data.finished; state.winner=data.winner||null;
+    state.legNo=Number(data.legNo)||1; state.matchStarted=!!data.matchStarted;
+    $('p1').value=state.names[0]||'Joueur 1'; $('p2').value=state.names[1]||'Joueur 2';
+    $('start').value=String(state.start); $('doubleIn').value=state.doubleIn?'yes':'no'; $('doubleOut').value=state.doubleOut?'yes':'no';
+    if ([...$('format').options].some(o=>o.value===state.format)) $('format').value=state.format;
+    if (Array.isArray(data.saved)) { try { localStorage.setItem(savedStorageKey(),JSON.stringify(data.saved)); } catch(e) {} }
+    render();
+  } finally { applyingRemote=false; }
+}
+async function loadBoardStates() {
+  if (!supabase) { cloudMessage('La bibliothèque Supabase ne se charge pas. Vérifie Internet.'); return; }
+  const {data,error}=await supabase.from('dart_boards').select('board_number,match_state,updated_at').order('board_number');
+  if(error){cloudMessage('Lecture Supabase impossible : '+error.message);return;}
+  remoteBoards={}; (data||[]).forEach(row=>remoteBoards[String(row.board_number)]=row);
+  renderLiveBoards(); cloudReady=true; cloudMessage('Connecté à Supabase · synchronisation activée',true);
+}
+function renderLiveBoards() {
+  const el=$('liveBoards'); if(!el)return; el.innerHTML='';
+  for(let n=1;n<=8;n++){
+    const row=remoteBoards[String(n)],d=row?.match_state||{},inProgress=!!d.matchStarted&&!d.finished;
+    const status=!d.matchStarted?'Aucun match en cours':d.finished?'Match terminé':`En cours · ${d.scores?.[0]??'—'} – ${d.scores?.[1]??'—'}`;
+    const names=Array.isArray(d.names)?d.names:['Joueur 1','Joueur 2'];
+    const card=document.createElement('div');card.className='match-card'+(inProgress?' current':'');
+    card.innerHTML=`<div class="match-head"><strong>Planche ${n} · ${escapeHtml(names[0])} / ${escapeHtml(names[1])}</strong><span class="tag">${inProgress?'EN COURS':d.finished?'TERMINÉ':'LIBRE'}</span></div><div>${escapeHtml(status)}</div><div class="muted">${d.legs?`Manches : ${d.legs[0]||0} – ${d.legs[1]||0}`:''}${row?.updated_at?' · Mis à jour : '+new Date(row.updated_at).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):''}</div><div class="actions" style="margin-top:8px"><button type="button" data-open-board="${n}">Ouvrir cette planche</button></div>`;
+    el.appendChild(card);
+  }
+  el.querySelectorAll('[data-open-board]').forEach(btn=>btn.addEventListener('click',()=>{
+    activeBoard=btn.dataset.openBoard; try{sessionStorage.setItem('dartsActiveBoard',activeBoard)}catch(e){}
+    showApp(); showPage('setupPage'); const row=remoteBoards[String(activeBoard)];
+    if(row?.match_state?.names) applyCloudSnapshot(row.match_state); else {settingsFromForm();render();} renderSaved();
+  }));
+}
+async function saveBoardState() {
+  if(!supabase||!activeBoard||applyingRemote||!cloudReady)return;
+  const {error}=await supabase.from('dart_boards').update({match_state:snapshotForCloud(),updated_at:new Date().toISOString()}).eq('board_number',Number(activeBoard));
+  if(error)cloudMessage('Écriture refusée par Supabase : '+error.message);
+}
+function queueCloudSave(){if(applyingRemote||!activeBoard||!cloudReady)return;clearTimeout(saveTimer);saveTimer=setTimeout(saveBoardState,300);}
+function startRealtime(){
+  if(!supabase)return; if(channel)supabase.removeChannel(channel);
+  channel=supabase.channel('dart-boards-live').on('postgres_changes',{event:'*',schema:'public',table:'dart_boards'},payload=>{
+    const row=payload.new;if(!row?.board_number)return; remoteBoards[String(row.board_number)]=row;renderLiveBoards();
+    if(String(row.board_number)===String(activeBoard)&&row.match_state?.names&&!applyingRemote)applyCloudSnapshot(row.match_state);
+  }).subscribe(status=>{if(status==='SUBSCRIBED')cloudMessage('Connecté à Supabase · mises à jour en direct',true);});
+}
+if(supabase){loadBoardStates().then(()=>startRealtime());setInterval(loadBoardStates,15000);}else cloudMessage('Impossible de charger Supabase.');
+
 function settingsFromForm(){
  state.names=[$('p1').value.trim()||'Joueur 1',$('p2').value.trim()||'Joueur 2'];
  state.start=Number($('start').value);state.doubleIn=$('doubleIn').value==='yes';
@@ -406,7 +481,7 @@ function render(){
   const d=state.darts[i];$('dart'+i).innerHTML=`Fléchette ${i+1}<b>${d?(d.displayLabel||d.label)+' · '+d.score:'—'}</b>`;
  }
  $('matchStatus').textContent=!state.matchStarted?'Configure les joueurs puis démarre un match.':state.finished?`Terminé : ${state.winner} gagne ${state.legs[0]}–${state.legs[1]}.`: `Match en cours · Manche ${state.legNo} · Premier à ${legsNeeded()} manche(s) · ${state.doubleIn?'Double In':'Simple In'} · ${state.doubleOut?'Double Out':'Sortie libre'}`;
- renderHistory();renderSaved();
+ renderHistory();renderSaved();renderLiveBoards();queueCloudSave();
 }
 function renderHistory(){
  const el=$('history');el.innerHTML='';
@@ -429,7 +504,7 @@ function renderSaved(){
 }
 function saveMatch(){
  const record={names:[...state.names],legs:[...state.legs],winner:state.winner||null,start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,date:new Date().toLocaleString('fr-BE'),history:[...state.history]};
- const saved=getSaved();saved.push(record);try{localStorage.setItem(savedStorageKey(),JSON.stringify(saved));$('toast').textContent='Résultat enregistré sur cet appareil.';}catch(e){$('toast').textContent='Le navigateur bloque le stockage local : le résultat ne peut pas être conservé.';}renderSaved();
+ const saved=getSaved();saved.push(record);try{localStorage.setItem(savedStorageKey(),JSON.stringify(saved));$('toast').textContent='Résultat enregistré puis synchronisé dès que possible.';}catch(e){$('toast').textContent='Le navigateur bloque le stockage local : le résultat ne peut pas être conservé.';}renderSaved();
 }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function showPage(pageId){document.querySelectorAll('nav [data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===pageId));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===pageId));}
@@ -452,7 +527,7 @@ $('export').addEventListener('click',()=>{
  const csv=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='resultats_flechettes.csv';a.click();URL.revokeObjectURL(url);
 });
-drawTarget();freshLeg();render();
+drawTarget();freshLeg();render();renderLiveBoards();
 })();
 </script>
 </body>
