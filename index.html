@@ -66,7 +66,8 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
         <option value="7">Planche 7</option><option value="8">Planche 8</option>
       </select>
     </label>
-    <button id="accessButton" class="primary">Ouvrir la planche</button>
+    <button id="accessButton" class="primary" type="button">Ouvrir la planche</button>
+    <p id="accessMessage" role="status" aria-live="polite" style="min-height:20px;margin:8px 0 0;color:#f1d27c;font-size:13px"></p>
     <p class="access-warning">Version de préparation : chaque planche garde son historique séparé sur cet appareil. La synchronisation entre appareils sera ajoutée ensuite.</p>
   </div>
 </section>
@@ -166,7 +167,8 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 'use strict';
 const $ = id => document.getElementById(id);
 const boardNames = {'1':'Planche 1','2':'Planche 2','3':'Planche 3','4':'Planche 4','5':'Planche 5','6':'Planche 6','7':'Planche 7','8':'Planche 8'};
-let activeBoard = sessionStorage.getItem('dartsActiveBoard') || '';
+let activeBoard = '';
+try { activeBoard = sessionStorage.getItem('dartsActiveBoard') || ''; } catch (e) { activeBoard = ''; }
 function savedStorageKey(){ return 'dartsSavedMatches_board_' + (activeBoard || 'none'); }
 function showAccess(){
   $('accessScreen').classList.remove('hidden');
@@ -178,16 +180,25 @@ function showApp(){
   $('activeBoardLabel').textContent = boardNames[activeBoard] || '—';
 }
 $('accessButton').addEventListener('click',()=>{
-  activeBoard=$('boardChoice').value;
-  try { sessionStorage.setItem('dartsActiveBoard',activeBoard); } catch (e) { /* La sélection reste active en mémoire si le navigateur bloque le stockage. */ }
+  const selected = $('boardChoice').value;
+  if (!boardNames[selected]) {
+    $('accessMessage').textContent = 'Sélectionne une planche valide.';
+    return;
+  }
+  activeBoard = selected;
+  try { sessionStorage.setItem('dartsActiveBoard', activeBoard); } catch (e) { /* La sélection reste active en mémoire si le stockage est bloqué. */ }
+  $('accessMessage').textContent = '';
   showApp();
   showPage('setupPage');
   renderSaved();
+  window.scrollTo(0, 0);
 });
 $('switchBoard').addEventListener('click',()=>{
   try { sessionStorage.removeItem('dartsActiveBoard'); } catch (e) {}
   activeBoard='';
+  $('accessMessage').textContent = '';
   showAccess();
+  window.scrollTo(0, 0);
 });
 if(activeBoard && boardNames[activeBoard]) showApp(); else showAccess();
 const order = [20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
