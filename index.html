@@ -268,7 +268,7 @@ function cloudMessage(msg, ok=false) {
 }
 function snapshotForCloud() {
   settingsFromForm();
-  return {names:[...state.names],start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,format:state.format,
+  return {names:[...state.names],start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,format:state.format,customLegs:Number($('customLegs').value)||11,
     scores:[...state.scores],active:state.active,darts:state.darts,opened:[...state.opened],legs:[...state.legs],history:state.history,
     finished:state.finished,winner:state.winner,legNo:state.legNo,legStarter:state.legStarter,matchStarted:state.matchStarted,resultSaved:!!state.resultSaved,saved:getSaved()};
 }
@@ -288,9 +288,15 @@ function applyCloudSnapshot(data, remoteUpdatedAt=null) {
     state.opened=Array.isArray(data.opened)?data.opened:[true,true]; state.legs=Array.isArray(data.legs)?data.legs:[0,0];
     state.history=Array.isArray(data.history)?data.history:[]; state.finished=!!data.finished; state.winner=data.winner||null;
     state.legNo=Number(data.legNo)||1; state.legStarter=Number(data.legStarter)===1?1:0; state.matchStarted=!!data.matchStarted; state.resultSaved=!!data.resultSaved;
-    $('p1').value=state.names[0]||'Joueur 1'; $('p2').value=state.names[1]||'Joueur 2';
-    $('start').value=String(state.start); $('doubleIn').value=state.doubleIn?'yes':'no'; $('doubleOut').value=state.doubleOut?'yes':'no';
-    if ([...$('format').options].some(o=>o.value===state.format)) $('format').value=state.format;
+    // Ne pas écraser les champs de préparation pendant que l'organisateur les modifie.
+    // Les mises à jour temps réel de Supabase peuvent arriver pendant la saisie.
+    if (!setupFormDirty) {
+      $('p1').value=state.names[0]||'Joueur 1'; $('p2').value=state.names[1]||'Joueur 2';
+      $('start').value=String(state.start); $('doubleIn').value=state.doubleIn?'yes':'no'; $('doubleOut').value=state.doubleOut?'yes':'no';
+      if ([...$('format').options].some(o=>o.value===state.format)) $('format').value=state.format;
+      if (data.customLegs != null) $('customLegs').value=String(data.customLegs);
+      $('customLegsLabel').classList.toggle('hidden',$('format').value!=='custom');
+    }
     if (Array.isArray(data.saved)) {
       try {
         const local=getSaved();
@@ -411,10 +417,10 @@ $('logoutButton').addEventListener('click',async()=>{if(supabase){const {error}=
 function settingsFromForm(){
  state.names=[$('p1').value.trim()||'Joueur 1',$('p2').value.trim()||'Joueur 2'];
  state.start=Number($('start').value);state.doubleIn=$('doubleIn').value==='yes';
- state.doubleOut=$('doubleOut').value==='yes';state.format=$('format').value;
+ state.doubleOut=$('doubleOut').value==='yes';state.format=$('format').value;state.customLegs=Number($('customLegs').value)||11;
 }
 function legsNeeded(){
- if(state.format==='custom') return Math.max(1,Math.min(99,Number($('customLegs').value)||1));
+ if(state.format==='custom') return Math.max(1,Math.min(99,Number(state.customLegs)||Number($('customLegs').value)||1));
  const n=Number(state.format);
  return Number.isFinite(n)&&n>=1?n:1;
 }
@@ -429,7 +435,7 @@ function startMatch(){
  const answer=choice.trim();
  if(answer!=='1'&&answer!=='2'){alert('Choisis 1 ou 2 pour désigner le joueur qui commence.');return;}
  const starter=Number(answer)-1;
- settingsFromForm();setupFormDirty=false;state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;state.resultSaved=false;freshLeg(starter);
+ settingsFromForm();state.customLegs=Number($('customLegs').value)||11;setupFormDirty=false;state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;state.resultSaved=false;freshLeg(starter);
  $('toast').textContent='Nouveau match démarré. '+state.names[starter]+' commence après avoir remporté le bull.';render();showPage('gamePage');window.scrollTo(0,0)
 }
 function sectorPath(cx,cy,r1,r2,a1,a2){
