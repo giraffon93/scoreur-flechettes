@@ -804,7 +804,11 @@ function completeTurn(message){
  const status=(!snap.opened&&!state.opened[p])?'DOUBLE IN non atteint':'OK';
  state.history.unshift({
   player:state.names[p],playerIndex:p,darts:labels,total:counted,before:snap.score,
-  after:state.scores[p],status,leg:state.legNo,turn:state.history.length+1,undoState:{...snap}
+  after:state.scores[p],status,leg:state.legNo,turn:state.history.length+1,
+  undoState:{...snap},
+  undoDarts:state.darts.map(d=>({...d})),
+  turnScoresAfter:[...state.scores],
+  turnOpenedAfter:[...state.opened]
  });
  state.darts=[];state.turnSnapshot=null;
  state.active=1-p;
@@ -874,23 +878,29 @@ function undo(){
   if(!last){$('toast').textContent='Aucune fléchette ou volée à annuler.';return;}
   const snap=last.undoState;
   state.history.shift();
+  const p=Number.isInteger(last.playerIndex)?last.playerIndex:state.active;
   if(snap&&Array.isArray(snap.scores)){
-   state.scores=[...snap.scores];
-   state.active=Number(snap.active)||0;
-   state.opened=Array.isArray(snap.openedAll)?[...snap.openedAll]:state.opened;
+   // Revenir à l'état juste après les tirs, mais avant le passage au joueur suivant.
+   // Les trois fléchettes restent visibles et peuvent être corrigées une par une.
+   state.scores=Array.isArray(last.turnScoresAfter)?[...last.turnScoresAfter]:[...snap.scores];
+   state.active=p;
+   state.opened=Array.isArray(last.turnOpenedAfter)?[...last.turnOpenedAfter]:(Array.isArray(snap.openedAll)?[...snap.openedAll]:state.opened);
    state.legs=Array.isArray(snap.legs)?[...snap.legs]:state.legs;
    state.legNo=Number(snap.legNo)||1;
    state.legStarter=Number(snap.legStarter)===1?1:0;
    state.finished=!!snap.finished;state.winner=snap.winner||null;
    state.matchStarted=snap.matchStarted!==false;
+   state.darts=Array.isArray(last.undoDarts)?last.undoDarts.map(d=>({...d})):[];
+   state.turnSnapshot={...snap};
   }else{
    // Compatibilité avec les anciennes volées enregistrées avant l'ajout de l'annulation complète.
-   const p=Number.isInteger(last.playerIndex)?last.playerIndex:state.active;
    if(Number.isFinite(Number(last.before)))state.scores[p]=Number(last.before);
-   state.active=p;
+   state.active=p;state.darts=[];state.turnSnapshot=null;
   }
-  state.darts=[];state.turnSnapshot=null;state.pendingLegWin=null;state.resultSaved=false;
-  $('toast').textContent='Dernière volée validée annulée. Tu peux relancer les trois fléchettes.';
+  state.pendingLegWin=null;state.resultSaved=false;
+  $('toast').textContent=state.darts.length
+   ? 'Retour à la volée précédente : les fléchettes sont restaurées. Tu peux en annuler une ou les relancer.'
+   : 'Dernière volée validée annulée. Tu peux relancer les trois fléchettes.';
   render();return;
  }
  const p=state.active;
