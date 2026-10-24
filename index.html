@@ -280,6 +280,23 @@ const state = {
 const SUPABASE_URL = 'https://irgsmmsnsxzbjgzjpaus.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_XPdvVF6ci7_p7GApfH880A_7mbp3h5c';
 const supabase = window.supabase?.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+// Identifiant stable par navigateur/appareil, distinct de la connexion organisateur.
+function getDartDeviceId(){
+  const key='dartsDeviceId';
+  try{
+    let id=localStorage.getItem(key);
+    if(!id){
+      id=(crypto.randomUUID?crypto.randomUUID():'device-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
+      localStorage.setItem(key,id);
+    }
+    return id;
+  }catch(e){
+    let id=sessionStorage.getItem(key);
+    if(!id){id='session-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);sessionStorage.setItem(key,id);}
+    return id;
+  }
+}
+const dartDeviceId=getDartDeviceId();
 let cloudReady = false, applyingRemote = false, saveTimer = null, channel = null, isOrganizer = false;
 let lastLocalEditAt = 0;
 let lastAppliedRemoteAt = 0;
@@ -344,9 +361,11 @@ async function persistPlayerRoster(){
  const row=remoteBoards['1'];
  if(!row){$('playersMessage').textContent='Liste enregistrée sur cet appareil. Impossible de trouver la cible 1 dans Supabase pour synchroniser.';return;}
  const nextState={...(row.match_state||{}),players:[...playerRoster]};
- const {data,error}=await supabase.from('dart_boards').update({match_state:nextState,updated_at:new Date().toISOString()}).eq('board_number',1).select('board_number,match_state,updated_at').maybeSingle();
+ const {data,error}=await supabase.rpc('save_dart_board_state',{
+   p_board_number:1,p_device_id:dartDeviceId,p_match_state:nextState
+ });
  if(error){$('playersMessage').textContent='Liste enregistrée localement, mais erreur de synchronisation : '+error.message;return;}
- if(data)remoteBoards['1']=data;else remoteBoards['1']={...row,match_state:nextState,updated_at:new Date().toISOString()};
+ remoteBoards['1']={...row,match_state:data?.match_state||nextState,updated_at:data?.updated_at||new Date().toISOString()};
  $('playersMessage').textContent='Liste des joueurs enregistrée et synchronisée.';
  renderLiveBoards();renderBoardPicker();
 }
@@ -465,11 +484,35 @@ function renderBoardFilters(){
 }
 $('selectAllBoards')?.addEventListener('click',()=>setSelectedOverviewBoards([1,2,3,4,5,6,7,8]));
 $('selectNoBoards')?.addEventListener('click',()=>setSelectedOverviewBoards([]));
-function openBoard(n){
+async function openBoard(n){
   const selected=String(n);
   setupFormDirty = false;
   localMatchStartLockUntil = 0;
   if(!boardNames[selected] || !isOrganizer) return;
+
+  // Le code est demandé uniquement lorsqu'un match est en cours sur un autre appareil.
+  const existing=remoteBoards[selected]?.match_state||{};
+  const inProgress=!!existing.matchStarted&&!existing.finished;
+  if(inProgress && supabase){
+    const {data:hosts,error:hostError}=await supabase.rpc('get_dart_board_host_status',{p_device_id:dartDeviceId});
+    if(hostError){
+      alert('Impossible de vérifier le verrouillage de cette cible : '+hostError.message);
+      return;
+    }
+    const host=(hosts||[]).find(x=>Number(x.board_number)===Number(n));
+    if(!host || !host.is_mine){
+      const code=prompt('Un match est en cours sur la cible '+n+'. Entre le code de cette cible pour y accéder :');
+      if(code===null)return;
+      const {error:authError}=await supabase.rpc('authorize_dart_board',{
+        p_board_number:Number(n),p_device_id:dartDeviceId,p_code:code.trim()
+      });
+      if(authError){
+        alert('Accès refusé : '+(authError.message||'code incorrect'));
+        return;
+      }
+    }
+  }
+
   activeBoard=selected;
   try{sessionStorage.setItem('dartsActiveBoard',activeBoard)}catch(e){}
   $('activeBoardLabel').textContent=boardNames[activeBoard];
@@ -517,8 +560,17 @@ function renderBoardPicker(){
 }
 async function saveBoardState() {
   if(!supabase||!activeBoard||applyingRemote||!cloudReady||!isOrganizer)return;
-  const {error}=await supabase.from('dart_boards').update({match_state:snapshotForCloud(),updated_at:new Date().toISOString()}).eq('board_number',Number(activeBoard));
-  if(error)cloudMessage('Écriture refusée par Supabase : '+error.message);
+  const snapshot=snapshotForCloud();
+  const {data,error}=await supabase.rpc('save_dart_board_state',{
+    p_board_number:Number(activeBoard),p_device_id:dartDeviceId,p_match_state:snapshot
+  });
+  if(error){
+    cloudMessage('Écriture refusée par Supabase : '+error.message);
+    return;
+  }
+  const row=remoteBoards[String(activeBoard)];
+  remoteBoards[String(activeBoard)]={...(row||{}),board_number:Number(activeBoard),match_state:data?.match_state||snapshot,updated_at:data?.updated_at||new Date().toISOString()};
+  renderLiveBoards();renderBoardPicker();
 }
 function queueCloudSave(){if(applyingRemote||!activeBoard||!cloudReady||!isOrganizer)return;lastLocalEditAt=Date.now();clearTimeout(saveTimer);saveTimer=setTimeout(saveBoardState,300);}
 function startRealtime(){
@@ -601,9 +653,16 @@ async function startMatch(starter){
  if(cloudReady && supabase && activeBoard){
    try {
      const snapshot=snapshotForCloud();
-     const {error}=await supabase.from('dart_boards').update({match_state:snapshot,updated_at:new Date().toISOString()}).eq('board_number',Number(activeBoard));
-     if(error){$('toast').textContent='Match démarré, mais erreur de sauvegarde : '+error.message;}
-     else {$('toast').textContent='Nouveau match enregistré. '+state.names[starter]+' commence après le bull.';}
+     const {data,error}=await supabase.rpc('start_dart_match',{
+       p_board_number:Number(activeBoard),p_device_id:dartDeviceId,p_match_state:snapshot
+     });
+     if(error){
+       state.matchStarted=false;
+       $('toast').textContent='Impossible de réserver cette cible : '+error.message;
+       render();return;
+     }
+     if(data?.match_state)remoteBoards[String(activeBoard)]={...(remoteBoards[String(activeBoard)]||{}),board_number:Number(activeBoard),match_state:data.match_state,updated_at:data.updated_at||new Date().toISOString()};
+     $('toast').textContent='Nouveau match enregistré et cible verrouillée. '+state.names[starter]+' commence après le bull.';
    } catch(e) {$('toast').textContent='Match démarré, mais la sauvegarde en ligne a échoué.';}
  } else {
    $('toast').textContent='Match démarré localement. La connexion en ligne n’est pas prête.';
@@ -749,12 +808,13 @@ function saveFinishedResult(){
  try{localStorage.setItem(savedStorageKey(),JSON.stringify(saved)); state.resultSaved=true; renderSaved();}
  catch(e){$('toast').textContent='Le match est terminé, mais le résultat n’a pas pu être enregistré localement.';}
 }
-function releaseBoardAndReturnToSetup(message){
+async function releaseBoardAndReturnToSetup(message){
   state.matchStarted=false;
   state.scores=[state.start,state.start];state.active=0;state.darts=[];state.opened=[!state.doubleIn,!state.doubleIn];
   state.pendingLegWin=null;state.turnSnapshot=null;
   $('toast').textContent=message;
   render();
+  if(supabase&&cloudReady&&isOrganizer&&activeBoard) await saveBoardState();
   showPage('setupPage');
   window.scrollTo(0,0);
 }
@@ -936,7 +996,7 @@ $('miss').addEventListener('click',()=>addDart({label:'Raté',score:0,double:fal
 $('singleBull').addEventListener('click',()=>recordBull(25,false));
 $('bullseye').addEventListener('click',()=>recordBull(50,true));
 $('endTurn').addEventListener('click',evaluateTurn);
-$('finishMatch').addEventListener('click',()=>{
+$('finishMatch').addEventListener('click',async()=>{
  if(!isOrganizer){$('toast').textContent='Connexion organisateur requise.';return;}
  if(!state.matchStarted){$('toast').textContent='Aucun match à terminer.';return;}
  if(state.finished){$('toast').textContent='Le match est déjà terminé.';return;}
@@ -951,6 +1011,7 @@ $('finishMatch').addEventListener('click',()=>{
   $('toast').textContent='Résultat enregistré ('+state.legs[0]+'–'+state.legs[1]+'). Cible libérée, prête pour un nouveau match.';
   $('p1').value='';$('p2').value='';setupFormDirty=false;updatePlayerSelectOptions();
   render();
+  await saveBoardState();
  }
 });
 $('undo').addEventListener('click',undo);
@@ -971,9 +1032,11 @@ $('clearSaved').addEventListener('click',async()=>{
    if(row?.match_state){
     const nextState={...row.match_state,saved:[]};
     if(supabase){
-     const {data,error}=await supabase.from('dart_boards').update({match_state:nextState,updated_at:new Date().toISOString()}).eq('board_number',n).select('board_number,match_state,updated_at').maybeSingle();
+     const {data,error}=await supabase.rpc('save_dart_board_state',{
+       p_board_number:n,p_device_id:dartDeviceId,p_match_state:nextState
+     });
      if(error){failed.push(n);continue;}
-     if(data)remoteBoards[String(n)]=data;else remoteBoards[String(n)]={...row,match_state:nextState};
+     remoteBoards[String(n)]={...row,match_state:data?.match_state||nextState,updated_at:data?.updated_at||new Date().toISOString()};
     }else remoteBoards[String(n)]={...row,match_state:nextState};
    }
   }
