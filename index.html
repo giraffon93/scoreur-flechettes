@@ -247,7 +247,7 @@ function snapshotForCloud() {
   settingsFromForm();
   return {names:[...state.names],start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,format:state.format,
     scores:[...state.scores],active:state.active,darts:state.darts,opened:[...state.opened],legs:[...state.legs],history:state.history,
-    finished:state.finished,winner:state.winner,legNo:state.legNo,matchStarted:state.matchStarted,saved:getSaved()};
+    finished:state.finished,winner:state.winner,legNo:state.legNo,matchStarted:state.matchStarted,resultSaved:!!state.resultSaved,saved:getSaved()};
 }
 function applyCloudSnapshot(data) {
   if (!data || typeof data !== 'object' || !Array.isArray(data.names)) return;
@@ -258,7 +258,7 @@ function applyCloudSnapshot(data) {
     state.active=Number(data.active)||0; state.darts=Array.isArray(data.darts)?data.darts:[];
     state.opened=Array.isArray(data.opened)?data.opened:[true,true]; state.legs=Array.isArray(data.legs)?data.legs:[0,0];
     state.history=Array.isArray(data.history)?data.history:[]; state.finished=!!data.finished; state.winner=data.winner||null;
-    state.legNo=Number(data.legNo)||1; state.matchStarted=!!data.matchStarted;
+    state.legNo=Number(data.legNo)||1; state.matchStarted=!!data.matchStarted; state.resultSaved=!!data.resultSaved;
     $('p1').value=state.names[0]||'Joueur 1'; $('p2').value=state.names[1]||'Joueur 2';
     $('start').value=String(state.start); $('doubleIn').value=state.doubleIn?'yes':'no'; $('doubleOut').value=state.doubleOut?'yes':'no';
     if ([...$('format').options].some(o=>o.value===state.format)) $('format').value=state.format;
@@ -384,7 +384,7 @@ function freshLeg(){
  state.scores=[state.start,state.start];state.active=0;state.darts=[];
  state.opened=[!state.doubleIn,!state.doubleIn];state.finished=false;state.winner=null;state.turnSnapshot=null;state.pendingLegWin=null;
 }
-function startMatch(){if(!isOrganizer){$('toast').textContent='Connexion organisateur requise pour modifier les scores.';return;}settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;freshLeg();$('toast').textContent='Nouveau match démarré.';render()}
+function startMatch(){if(!isOrganizer){$('toast').textContent='Connexion organisateur requise pour modifier les scores.';return;}settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;state.resultSaved=false;freshLeg();$('toast').textContent='Nouveau match démarré.';render()}
 function sectorPath(cx,cy,r1,r2,a1,a2){
  const p=a=>({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)});
  function point(rad,a){return {x:cx+rad*Math.cos(a),y:cy+rad*Math.sin(a)}}
@@ -509,6 +509,13 @@ function completeTurn(message){
  $('toast').textContent=message+' Tour de '+state.names[state.active]+'.';
  render();
 }
+function saveFinishedResult(){
+ if(state.resultSaved || !activeBoard) return;
+ const record={names:[...state.names],legs:[...state.legs],winner:state.winner||null,finished:true,start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,date:new Date().toLocaleString('fr-BE'),history:[...state.history]};
+ const saved=getSaved(); saved.push(record);
+ try{localStorage.setItem(savedStorageKey(),JSON.stringify(saved)); state.resultSaved=true; renderSaved();}
+ catch(e){$('toast').textContent='Le match est terminé, mais le résultat n’a pas pu être enregistré localement.';}
+}
 function evaluateTurn(){
  if(state.pendingLegWin!==null && state.pendingLegWin!==undefined){
   const p=state.pendingLegWin;
@@ -522,7 +529,8 @@ function evaluateTurn(){
   state.legs[p]++;
   if(state.legs[p]>=legsNeeded()){
    state.finished=true;state.winner=state.names[p];
-   $('toast').textContent=`${state.winner} remporte le match.`;
+   saveFinishedResult();
+   $('toast').textContent=`${state.winner} remporte le match (${state.legs[0]}–${state.legs[1]}). Résultat enregistré.`;
   }else{
    state.legNo++;freshLeg();
    $('toast').textContent=`Manche validée par ${state.names[p]}. Manche suivante.`;
@@ -628,14 +636,14 @@ $('finishMatch').addEventListener('click',()=>{
  if(!state.matchStarted){$('toast').textContent='Aucun match à terminer.';return;}
  if(state.finished){$('toast').textContent='Le match est déjà terminé.';return;}
  if(confirm('Terminer ce match et libérer la cible ? Le résultat sera conservé dans la liste des résultats.')){
-  state.finished=true;
-  state.winner=state.legs[0]===state.legs[1]?null:(state.legs[0]>state.legs[1]?state.names[0]:state.names[1]);
-  const record={names:[...state.names],legs:[...state.legs],winner:state.winner||null,finished:true,start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,date:new Date().toLocaleString('fr-BE'),history:[...state.history]};
-  const saved=getSaved();saved.push(record);
-  try{localStorage.setItem(savedStorageKey(),JSON.stringify(saved));}catch(e){}
-  state.matchStarted=false;state.finished=false;state.winner=null;
+  if(!state.finished){
+   state.finished=true;
+   state.winner=state.legs[0]===state.legs[1]?null:(state.legs[0]>state.legs[1]?state.names[0]:state.names[1]);
+  }
+  saveFinishedResult();
+  state.matchStarted=false;
   state.scores=[state.start,state.start];state.active=0;state.darts=[];state.opened=[!state.doubleIn,!state.doubleIn];state.pendingLegWin=null;state.turnSnapshot=null;
-  $('toast').textContent='Résultat enregistré. Cible libérée, prête pour un nouveau match.';
+  $('toast').textContent='Résultat enregistré ('+state.legs[0]+'–'+state.legs[1]+'). Cible libérée, prête pour un nouveau match.';
   render();
  }
 });
