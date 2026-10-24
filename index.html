@@ -177,7 +177,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 <li>Choisis les noms des deux joueurs.</li>
 <li>Choisis le score de départ, le Double In et le Double Out.</li>
 <li>Choisis le format du match et clique sur « Démarrer / nouveau match ».</li>
-<li>Ouvre ensuite « Cible & score » pour jouer.</li>
+<li>Le score s’ouvre automatiquement après le démarrage du match.</li>
 </ol>
 <p class="status">Aucun serveur nécessaire. Les scores sont conservés sur cet appareil uniquement.</p>
 </section>
@@ -835,7 +835,8 @@ async function releaseBoardAndReturnToSetup(message){
   $('toast').textContent=message;
   render();
   if(supabase&&cloudReady&&isOrganizer&&activeBoard) await saveBoardState();
-  showPage('setupPage');
+  updateBoardNav();
+  showPage('boardSelectPage');
   window.scrollTo(0,0);
 }
 function announceFinishedMatch(){
@@ -843,7 +844,7 @@ function announceFinishedMatch(){
   const message=state.winner
     ? `${state.winner} remporte le match ! Score final : ${score}.`
     : `Match terminé. Score final : ${score}. Aucun vainqueur (égalité).`;
-  alert(message+'\n\nAppuie sur OK pour revenir à la préparation de cette cible.');
+  alert(message+'\n\nAppuie sur OK pour revenir au choix d’une cible.');
   releaseBoardAndReturnToSetup('Cible libérée. Tu peux préparer un nouveau match.');
 }
 function evaluateTurn(){
@@ -1025,11 +1026,10 @@ function saveMatch(){
 }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function updateBoardNav(){
- document.querySelectorAll('nav .board-only').forEach(b=>b.classList.toggle('hidden',!isOrganizer||!activeBoard));
+ // La préparation et le score restent des écrans internes au parcours « Choisir une cible ».
+ // On ne les affiche jamais comme onglets séparés pour garder le menu épuré.
+ document.querySelectorAll('nav .board-only').forEach(b=>b.classList.add('hidden'));
  document.querySelectorAll('nav .organizer-only').forEach(b=>b.classList.toggle('hidden',!isOrganizer));
- // La préparation n'est plus accessible pendant un match actif ; elle revient une fois le match terminé.
- const setupTab=document.querySelector('nav [data-page="setupPage"]');
- if(setupTab)setupTab.classList.toggle('hidden',!isOrganizer||!activeBoard||(state.matchStarted&&!state.finished));
  const pill=$('boardPill'); if(pill)pill.style.display=isOrganizer&&activeBoard?'block':'none';
 }
 function showPage(pageId){
@@ -1066,6 +1066,9 @@ $('finishMatch').addEventListener('click',async()=>{
   $('p1').value='';$('p2').value='';setupFormDirty=false;updatePlayerSelectOptions();
   render();
   await saveBoardState();
+  updateBoardNav();
+  showPage('boardSelectPage');
+  window.scrollTo(0,0);
  }
 });
 $('undo').addEventListener('click',undo);
