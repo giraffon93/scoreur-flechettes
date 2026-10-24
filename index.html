@@ -262,7 +262,16 @@ function applyCloudSnapshot(data) {
     $('p1').value=state.names[0]||'Joueur 1'; $('p2').value=state.names[1]||'Joueur 2';
     $('start').value=String(state.start); $('doubleIn').value=state.doubleIn?'yes':'no'; $('doubleOut').value=state.doubleOut?'yes':'no';
     if ([...$('format').options].some(o=>o.value===state.format)) $('format').value=state.format;
-    if (Array.isArray(data.saved)) { try { localStorage.setItem(savedStorageKey(),JSON.stringify(data.saved)); } catch(e) {} }
+    if (Array.isArray(data.saved)) {
+      try {
+        const local=getSaved();
+        const merged=[...data.saved];
+        const key=m=>m.id||[m.date,(m.names||[]).join('|'),(m.legs||[]).join('|'),m.winner||''].join('::');
+        const seen=new Set(merged.map(key));
+        for(const match of local){const k=key(match);if(!seen.has(k)){merged.push(match);seen.add(k);}}
+        localStorage.setItem(savedStorageKey(),JSON.stringify(merged));
+      } catch(e) {}
+    }
     render();
   } finally { applyingRemote=false; }
 }
@@ -511,7 +520,13 @@ function completeTurn(message){
 }
 function saveFinishedResult(){
  if(state.resultSaved || !activeBoard) return;
- const record={names:[...state.names],legs:[...state.legs],winner:state.winner||null,finished:true,start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,date:new Date().toLocaleString('fr-BE'),history:[...state.history]};
+ // If a winner is declared, make sure the saved legs reflect the match format.
+ // This also protects the results list if a state update arrives out of order.
+ if(state.winner){
+  const winnerIndex=state.names.findIndex(name=>name===state.winner);
+  if(winnerIndex>=0 && state.legs[winnerIndex]<legsNeeded()) state.legs[winnerIndex]=legsNeeded();
+ }
+ const record={id:(crypto.randomUUID?crypto.randomUUID():String(Date.now())+'-'+Math.random().toString(16).slice(2)),names:[...state.names],legs:[...state.legs],winner:state.winner||null,finished:true,start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,date:new Date().toLocaleString('fr-BE'),history:[...state.history]};
  const saved=getSaved(); saved.push(record);
  try{localStorage.setItem(savedStorageKey(),JSON.stringify(saved)); state.resultSaved=true; renderSaved();}
  catch(e){$('toast').textContent='Le match est terminé, mais le résultat n’a pas pu être enregistré localement.';}
