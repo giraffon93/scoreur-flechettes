@@ -29,7 +29,9 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .dart{padding:9px 4px;text-align:center;border:1px solid var(--line);border-radius:9px;background:#11151b}.dart b{display:block;font-size:18px}
 .dart button{margin-top:6px;padding:6px;font-size:12px}
 .list{display:grid;gap:8px}.match-card,.history-row{border:1px solid var(--line);border-radius:9px;padding:10px;background:#141820}
-.match-card.current{border-color:var(--accent)}.match-head{display:flex;justify-content:space-between;gap:8px;align-items:center}.tag{font-size:11px;color:#161616;background:var(--accent);padding:3px 7px;border-radius:99px;white-space:nowrap}
+.match-card.current{border-color:var(--accent)}.match-head{display:flex;justify-content:space-between;gap:8px;align-items:center}.tag{font-size:11px;color:#161616;background:var(--accent);padding:4px 9px;border-radius:99px;white-space:nowrap;font-weight:800}
+.tag.status-live{background:#25b864;color:#071b0f;border:1px solid #49d982}
+.tag.status-free{background:#ffd45a;color:#211900;border:1px solid #ffe28a}
 /* Tableau général compact : 4 colonnes x 2 lignes sur grand écran */
 #boardFilters{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px}
 #boardFilters label{display:flex;align-items:center;gap:5px;margin:0;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#141820;color:var(--text);font-size:13px}
@@ -248,7 +250,7 @@ let remoteBoards = {};
 function setOrganizerUI() {
   const shell=$('appShell');
   shell.classList.toggle('readonly',!isOrganizer);
-  ['p1','p2','start','doubleIn','doubleOut','format','customLegs','newMatch','saveMatch','miss','singleBull','bullseye','undo','endTurn','reset','clearSaved'].forEach(id=>{const el=$(id);if(el)el.disabled=!isOrganizer;});
+  ['p1','p2','start','doubleIn','doubleOut','format','customLegs','newMatch','saveMatch','miss','singleBull','bullseye','undo','endTurn','finishMatch','reset','clearSaved'].forEach(id=>{const el=$(id);if(el)el.disabled=!isOrganizer;});
   $('loginButton').classList.toggle('hidden',isOrganizer);
   $('logoutButton').classList.toggle('hidden',!isOrganizer);
   $('emailLabel').classList.toggle('hidden',isOrganizer);
@@ -354,10 +356,10 @@ function renderLiveBoards() {
   if(!selected.length){el.innerHTML='<div class="muted">Aucune cible sélectionnée. Coche une ou plusieurs cibles ci-dessus.</div>';renderBoardFilters();return;}
   for(const n of selected){
     const row=remoteBoards[String(n)],d=row?.match_state||{},inProgress=!!d.matchStarted&&!d.finished;
-    const status=!d.matchStarted?'Aucun match en cours':d.finished?'Match terminé':`En cours · ${d.scores?.[0]??'—'} – ${d.scores?.[1]??'—'}`;
+    const status=inProgress?`En cours · ${d.scores?.[0]??'—'} – ${d.scores?.[1]??'—'}`:'Cible disponible pour un nouveau match';
     const names=Array.isArray(d.names)?d.names:['Joueur 1','Joueur 2'];
     const card=document.createElement('div');card.className='match-card'+(inProgress?' current':'');
-    card.innerHTML=`<div class="match-head"><strong>Cible ${n} · ${escapeHtml(names[0])} / ${escapeHtml(names[1])}</strong><span class="tag">${inProgress?'EN COURS':d.finished?'TERMINÉ':'LIBRE'}</span></div><div>${escapeHtml(status)}</div><div class="muted">${d.legs?`Manches : ${d.legs[0]||0} – ${d.legs[1]||0}`:''}${row?.updated_at?' · Mis à jour : '+new Date(row.updated_at).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):''}</div>`;
+    card.innerHTML=`<div class="match-head"><strong>Cible ${n} · ${escapeHtml(names[0])} / ${escapeHtml(names[1])}</strong><span class="tag ${inProgress?'status-live':'status-free'}">${inProgress?'EN COURS':'LIBRE'}</span></div><div>${escapeHtml(status)}</div><div class="muted">${d.legs?`Manches : ${d.legs[0]||0} – ${d.legs[1]||0}`:''}${row?.updated_at?' · Mis à jour : '+new Date(row.updated_at).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):''}</div>`;
     el.appendChild(card);
   }
   renderBoardFilters();
@@ -366,10 +368,10 @@ function renderBoardPicker(){
   const el=$('boardPickerGrid'); if(!el)return; el.innerHTML='';
   for(let n=1;n<=8;n++){
     const row=remoteBoards[String(n)],d=row?.match_state||{},inProgress=!!d.matchStarted&&!d.finished;
-    const status=!d.matchStarted?'Libre':d.finished?'Terminé':`En cours · ${d.scores?.[0]??'—'} – ${d.scores?.[1]??'—'}`;
+    const status=inProgress?`EN COURS · ${d.scores?.[0]??'—'} – ${d.scores?.[1]??'—'}`:'LIBRE';
     const names=Array.isArray(d.names)?d.names:['Joueur 1','Joueur 2'];
-    const btn=document.createElement('button');btn.type='button';btn.innerHTML=`<strong>Cible ${n}${String(n)===String(activeBoard)?' · Sélectionnée':''}</strong><span>${escapeHtml(status)}</span><span>${escapeHtml(names[0])} / ${escapeHtml(names[1])}</span>`;
-    if(inProgress)btn.style.borderColor='var(--accent)';
+    const btn=document.createElement('button');btn.type='button';btn.innerHTML=`<strong>Cible ${n}${String(n)===String(activeBoard)?' · Sélectionnée':''}</strong><span class="tag ${inProgress?'status-live':'status-free'}" style="display:inline-block;margin:2px 0 6px">${escapeHtml(status)}</span><span>${escapeHtml(names[0])} / ${escapeHtml(names[1])}</span>`;
+    if(inProgress)btn.style.borderColor='#25b864';
     btn.addEventListener('click',()=>openBoard(n));el.appendChild(btn);
   }
 }
@@ -418,7 +420,7 @@ function freshLeg(){
  state.scores=[state.start,state.start];state.active=0;state.darts=[];
  state.opened=[!state.doubleIn,!state.doubleIn];state.finished=false;state.winner=null;state.turnSnapshot=null;state.pendingLegWin=null;
 }
-function startMatch(){if(!isOrganizer){$('toast').textContent='Connexion organisateur requise pour modifier les scores.';return;}settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;state.resultSaved=false;freshLeg();$('toast').textContent='Nouveau match démarré.';render()}
+function startMatch(){if(!isOrganizer){$('toast').textContent='Connexion organisateur requise pour modifier les scores.';return;}settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;state.resultSaved=false;freshLeg();$('toast').textContent='Nouveau match démarré.';render();showPage('gamePage');window.scrollTo(0,0)}
 function sectorPath(cx,cy,r1,r2,a1,a2){
  const p=a=>({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)});
  function point(rad,a){return {x:cx+rad*Math.cos(a),y:cy+rad*Math.sin(a)}}
@@ -556,6 +558,23 @@ function saveFinishedResult(){
  try{localStorage.setItem(savedStorageKey(),JSON.stringify(saved)); state.resultSaved=true; renderSaved();}
  catch(e){$('toast').textContent='Le match est terminé, mais le résultat n’a pas pu être enregistré localement.';}
 }
+function releaseBoardAndReturnToSetup(message){
+  state.matchStarted=false;
+  state.scores=[state.start,state.start];state.active=0;state.darts=[];state.opened=[!state.doubleIn,!state.doubleIn];
+  state.pendingLegWin=null;state.turnSnapshot=null;
+  $('toast').textContent=message;
+  render();
+  showPage('setupPage');
+  window.scrollTo(0,0);
+}
+function announceFinishedMatch(){
+  const score=`${state.legs[0]}–${state.legs[1]}`;
+  const message=state.winner
+    ? `${state.winner} remporte le match ! Score final : ${score}.`
+    : `Match terminé. Score final : ${score}. Aucun vainqueur (égalité).`;
+  alert(message+'\n\nAppuie sur OK pour revenir à la préparation de cette cible.');
+  releaseBoardAndReturnToSetup('Cible libérée. Tu peux préparer un nouveau match.');
+}
 function evaluateTurn(){
  if(state.pendingLegWin!==null && state.pendingLegWin!==undefined){
   const p=state.pendingLegWin;
@@ -570,7 +589,8 @@ function evaluateTurn(){
   if(state.legs[p]>=legsNeeded()){
    state.finished=true;state.winner=state.names[p];
    saveFinishedResult();
-   $('toast').textContent=`${state.winner} remporte le match (${state.legs[0]}–${state.legs[1]}). Résultat enregistré.`;
+   announceFinishedMatch();
+   return;
   }else{
    state.legNo++;freshLeg();
    $('toast').textContent=`Manche validée par ${state.names[p]}. Manche suivante.`;
