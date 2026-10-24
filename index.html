@@ -640,32 +640,43 @@ $('bullChoiceModal').addEventListener('click',event=>{if(event.target===$('bullC
 async function startMatch(starter){
  if(!isOrganizer){$('toast').textContent='Connexion organisateur requise pour modifier les scores.';return;}
  if(starter!==0&&starter!==1)return;
+ if(!cloudReady || !supabase || !activeBoard){
+   $('toast').textContent='Impossible de démarrer : la connexion Supabase ou la cible active n’est pas prête.';
+   return;
+ }
+ // Le RPC SQL exige aussi le code de la cible au démarrage du match.
+ const targetCode=prompt('Entre le code de la cible '+activeBoard+' pour démarrer le match :');
+ if(targetCode===null)return;
+ if(!targetCode.trim()){$('toast').textContent='Démarrage annulé : le code de la cible est obligatoire.';return;}
  // Lire les champs saisis au tout dernier moment, avant toute synchronisation.
  settingsFromForm();
  state.customLegs=Number($('customLegs').value)||11;
  state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;state.finished=false;state.winner=null;state.resultSaved=false;
  freshLeg(starter);
- // Bloquer temporairement les anciens snapshots qui pourraient arriver pendant la sauvegarde.
  localMatchStartLockUntil=Date.now()+6000;
  setupFormDirty=false;
  $('toast').textContent='Enregistrement des nouveaux paramètres…';
- // Enregistrer immédiatement les nouveaux noms et réglages avant de changer de page.
- if(cloudReady && supabase && activeBoard){
-   try {
-     const snapshot=snapshotForCloud();
-     const {data,error}=await supabase.rpc('start_dart_match',{
-       p_board_number:Number(activeBoard),p_device_id:dartDeviceId,p_match_state:snapshot
-     });
-     if(error){
-       state.matchStarted=false;
-       $('toast').textContent='Impossible de réserver cette cible : '+error.message;
-       render();return;
-     }
-     if(data?.match_state)remoteBoards[String(activeBoard)]={...(remoteBoards[String(activeBoard)]||{}),board_number:Number(activeBoard),match_state:data.match_state,updated_at:data.updated_at||new Date().toISOString()};
-     $('toast').textContent='Nouveau match enregistré et cible verrouillée. '+state.names[starter]+' commence après le bull.';
-   } catch(e) {$('toast').textContent='Match démarré, mais la sauvegarde en ligne a échoué.';}
- } else {
-   $('toast').textContent='Match démarré localement. La connexion en ligne n’est pas prête.';
+ try {
+   const snapshot=snapshotForCloud();
+   const {data,error}=await supabase.rpc('start_dart_match',{
+     p_board_number:Number(activeBoard),
+     p_device_id:dartDeviceId,
+     p_password:targetCode.trim(),
+     p_match_state:snapshot
+   });
+   if(error){
+     state.matchStarted=false;
+     $('toast').textContent='Impossible de démarrer le match : '+error.message;
+     render();return;
+   }
+   // Le RPC renvoie les informations de réservation, pas le match_state : mettre à jour la carte localement.
+   remoteBoards[String(activeBoard)]={...(remoteBoards[String(activeBoard)]||{}),board_number:Number(activeBoard),match_state:snapshot,updated_at:new Date().toISOString()};
+   renderLiveBoards();renderBoardPicker();
+   $('toast').textContent='Nouveau match enregistré et cible verrouillée. '+state.names[starter]+' commence après le bull.';
+ } catch(e) {
+   state.matchStarted=false;
+   $('toast').textContent='Échec de la sauvegarde en ligne : '+(e?.message||'erreur inconnue');
+   render();return;
  }
  render();
  showPage('gamePage');
