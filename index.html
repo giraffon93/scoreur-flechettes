@@ -835,6 +835,9 @@ async function releaseBoardAndReturnToSetup(message){
   $('toast').textContent=message;
   render();
   if(supabase&&cloudReady&&isOrganizer&&activeBoard) await saveBoardState();
+  // La cible est libérée : on quitte explicitement son écran de préparation/score.
+  activeBoard='';
+  try{sessionStorage.removeItem('dartsActiveBoard')}catch(e){}
   updateBoardNav();
   showPage('boardSelectPage');
   window.scrollTo(0,0);
@@ -1066,6 +1069,9 @@ $('finishMatch').addEventListener('click',async()=>{
   $('p1').value='';$('p2').value='';setupFormDirty=false;updatePlayerSelectOptions();
   render();
   await saveBoardState();
+  // Après l’enregistrement du résultat, revenir au sélecteur et désélectionner la cible.
+  activeBoard='';
+  try{sessionStorage.removeItem('dartsActiveBoard')}catch(e){}
   updateBoardNav();
   showPage('boardSelectPage');
   window.scrollTo(0,0);
