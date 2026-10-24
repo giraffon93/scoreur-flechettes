@@ -186,7 +186,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 <div id="resultsPage" class="page">
 <section class="panel">  <h2>Matchs enregistrés</h2>
   <div class="grid2" style="margin-bottom:10px"><label>Afficher les résultats de<select id="resultsBoardFilter"><option value="all">Toutes les cibles</option><option value="1">Cible 1</option><option value="2">Cible 2</option><option value="3">Cible 3</option><option value="4">Cible 4</option><option value="5">Cible 5</option><option value="6">Cible 6</option><option value="7">Cible 7</option><option value="8">Cible 8</option></select></label></div>
-  <div class="actions"><button id="clearSaved" class="danger">Effacer les résultats de la cible active</button><button id="export">Exporter les résultats CSV</button></div>
+  <div class="actions"><button id="clearSaved" class="danger">Effacer les résultats affichés</button><button id="export">Exporter les résultats CSV</button></div>
   <p class="help">Les résultats de toutes les cibles sont regroupés ici. Sélectionne un match pour consulter ses volées.</p>
   <div id="savedMatches" class="list"></div>
   <div id="historyDetails" class="hidden" style="margin-top:18px"><h3>Volées du match sélectionné</h3><p class="help" id="historyMatchLabel">Volées du match choisi.</p><div id="history" class="list"></div></div>
@@ -702,8 +702,39 @@ $('finishMatch').addEventListener('click',()=>{
 });
 $('undo').addEventListener('click',undo);
 $('reset').addEventListener('click',()=>{if(!isOrganizer){$('toast').textContent='Connexion organisateur requise.';return;}if(confirm('Réinitialiser le match en cours ?')){settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;freshLeg();$('toast').textContent='Match réinitialisé.';render()}});
-$('resultsBoardFilter')?.addEventListener('change',()=>{selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSaved()});
-$('clearSaved').addEventListener('click',()=>{if(!isOrganizer){$('toast').textContent='Connexion organisateur requise.';return;}if(!activeBoard){$('toast').textContent='Choisis une cible pour effacer ses résultats.';return;}if(confirm('Effacer les résultats enregistrés localement pour la cible '+activeBoard+' ?')){try{localStorage.removeItem(savedStorageKey())}catch(e){}const row=remoteBoards[String(activeBoard)];if(row?.match_state&&Array.isArray(row.match_state.saved)){row.match_state.saved=[];}selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSaved();queueCloudSave()}});
+$('resultsBoardFilter')?.addEventListener('change',()=>{selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSaved();const f=$('resultsBoardFilter').value;$('clearSaved').textContent=f==='all'?'Effacer les résultats de toutes les cibles':'Effacer les résultats de la cible '+f;});
+$('clearSaved').addEventListener('click',async()=>{
+ if(!isOrganizer){$('toast').textContent='Connexion organisateur requise.';return;}
+ const filter=$('resultsBoardFilter')?.value||'all';
+ const targets=filter==='all'?[1,2,3,4,5,6,7,8]:[Number(filter)];
+ const description=filter==='all'?'tous les résultats de toutes les cibles':'tous les résultats de la cible '+filter;
+ if(!confirm('Effacer '+description+' ? Cette action est définitive.'))return;
+ const btn=$('clearSaved');btn.disabled=true;
+ let failed=[];
+ try{
+  for(const n of targets){
+   try{localStorage.removeItem('dartsSavedMatches_board_'+n)}catch(e){}
+   const row=remoteBoards[String(n)];
+   if(row?.match_state){
+    const nextState={...row.match_state,saved:[]};
+    if(supabase){
+     const {data,error}=await supabase.from('dart_boards').update({match_state:nextState,updated_at:new Date().toISOString()}).eq('board_number',n).select('board_number,match_state,updated_at').maybeSingle();
+     if(error){failed.push(n);continue;}
+     if(data)remoteBoards[String(n)]=data;else remoteBoards[String(n)]={...row,match_state:nextState};
+    }else remoteBoards[String(n)]={...row,match_state:nextState};
+   }
+  }
+  try{
+   const legacy=JSON.parse(localStorage.getItem('dartsSavedMatches_board_none')||'[]');
+   if(filter==='all')localStorage.removeItem('dartsSavedMatches_board_none');
+   else {const kept=Array.isArray(legacy)?legacy.filter(m=>String(m.target||'')!==filter):[];localStorage.setItem('dartsSavedMatches_board_none',JSON.stringify(kept));}
+  }catch(e){}
+  selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSaved();renderLiveBoards();renderBoardPicker();
+  if(failed.length){$('toast').textContent='Suppression partielle : impossible de supprimer les résultats sur la cible '+failed.join(', ')+'. Vérifie la connexion organisateur et réessaie.';}
+  else $('toast').textContent=filter==='all'?'Tous les résultats ont été effacés.':'Les résultats de la cible '+filter+' ont été effacés.';
+ }catch(e){$('toast').textContent='Erreur pendant la suppression : '+(e?.message||e);}
+ finally{btn.disabled=!isOrganizer;}
+});
 $('export').addEventListener('click',()=>{
  const saved=getFilteredSavedMatches();if(!saved.length){$('toast').textContent='Aucun résultat à exporter pour ce filtre.';return}
  const rows=[['Cible','Date','Joueur 1','Manches J1','Joueur 2','Manches J2','Vainqueur','Départ','Double In','Double Out'],...saved.map(m=>[m.target||'',m.date,m.names?.[0]||'',m.legs?.[0]??0,m.names?.[1]||'',m.legs?.[1]??0,m.winner||'',m.start,m.doubleIn?'oui':'non',m.doubleOut?'oui':'non'])];
