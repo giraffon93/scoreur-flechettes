@@ -248,6 +248,7 @@ let cloudReady = false, applyingRemote = false, saveTimer = null, channel = null
 let lastLocalEditAt = 0;
 let lastAppliedRemoteAt = 0;
 let setupFormDirty = false;
+let localMatchStartLockUntil = 0;
 let remoteBoards = {};
 function setOrganizerUI() {
   const shell=$('appShell');
@@ -274,6 +275,11 @@ function snapshotForCloud() {
 }
 function applyCloudSnapshot(data, remoteUpdatedAt=null) {
   if (!data || typeof data !== 'object' || !Array.isArray(data.names)) return;
+  const currentPage = document.querySelector('.page.active')?.id;
+  // Ne jamais réappliquer les anciens paramètres cloud pendant que l'organisateur prépare un match.
+  if (isOrganizer && setupFormDirty && currentPage === 'setupPage') return;
+  // Après le démarrage, laisse le temps à l'écriture locale d'être enregistrée dans Supabase.
+  if (Date.now() < localMatchStartLockUntil) return;
   const remoteTime = remoteUpdatedAt ? Date.parse(remoteUpdatedAt) : 0;
   // Ignore snapshots fetched before the most recent local action; otherwise a slow poll
   // or realtime echo can undo a dart/action the organizer just entered.
@@ -338,6 +344,8 @@ $('selectAllBoards')?.addEventListener('click',()=>setSelectedOverviewBoards([1,
 $('selectNoBoards')?.addEventListener('click',()=>setSelectedOverviewBoards([]));
 function openBoard(n){
   const selected=String(n);
+  setupFormDirty = false;
+  localMatchStartLockUntil = 0;
   if(!boardNames[selected] || !isOrganizer) return;
   activeBoard=selected;
   try{sessionStorage.setItem('dartsActiveBoard',activeBoard)}catch(e){}
@@ -428,15 +436,36 @@ function freshLeg(starter=0){
  state.legStarter=starter===1?1:0;state.scores=[state.start,state.start];state.active=state.legStarter;state.darts=[];
  state.opened=[!state.doubleIn,!state.doubleIn];state.finished=false;state.winner=null;state.turnSnapshot=null;state.pendingLegWin=null;
 }
-function startMatch(){
+async function startMatch(){
  if(!isOrganizer){$('toast').textContent='Connexion organisateur requise pour modifier les scores.';return;}
  const choice=prompt('Qui a remporté le bull et commence la première manche ?\nTape 1 pour '+($('p1').value.trim()||'Joueur 1')+' ou 2 pour '+($('p2').value.trim()||'Joueur 2')+'.','1');
  if(choice===null)return;
  const answer=choice.trim();
  if(answer!=='1'&&answer!=='2'){alert('Choisis 1 ou 2 pour désigner le joueur qui commence.');return;}
  const starter=Number(answer)-1;
- settingsFromForm();state.customLegs=Number($('customLegs').value)||11;setupFormDirty=false;state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;state.resultSaved=false;freshLeg(starter);
- $('toast').textContent='Nouveau match démarré. '+state.names[starter]+' commence après avoir remporté le bull.';render();showPage('gamePage');window.scrollTo(0,0)
+ // Lire les champs saisis au tout dernier moment, avant toute synchronisation.
+ settingsFromForm();
+ state.customLegs=Number($('customLegs').value)||11;
+ state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;state.finished=false;state.winner=null;state.resultSaved=false;
+ freshLeg(starter);
+ // Bloquer temporairement les anciens snapshots qui pourraient arriver pendant la sauvegarde.
+ localMatchStartLockUntil=Date.now()+6000;
+ setupFormDirty=false;
+ $('toast').textContent='Enregistrement des nouveaux paramètres…';
+ // Enregistrer immédiatement les nouveaux noms et réglages avant de changer de page.
+ if(cloudReady && supabase && activeBoard){
+   try {
+     const snapshot=snapshotForCloud();
+     const {error}=await supabase.from('dart_boards').update({match_state:snapshot,updated_at:new Date().toISOString()}).eq('board_number',Number(activeBoard));
+     if(error){$('toast').textContent='Match démarré, mais erreur de sauvegarde : '+error.message;}
+     else {$('toast').textContent='Nouveau match enregistré. '+state.names[starter]+' commence après le bull.';}
+   } catch(e) {$('toast').textContent='Match démarré, mais la sauvegarde en ligne a échoué.';}
+ } else {
+   $('toast').textContent='Match démarré localement. La connexion en ligne n’est pas prête.';
+ }
+ render();
+ showPage('gamePage');
+ window.scrollTo(0,0);
 }
 function sectorPath(cx,cy,r1,r2,a1,a2){
  const p=a=>({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)});
@@ -735,6 +764,7 @@ function showPage(pageId){
  if(isOrganizer && ['setupPage','gamePage'].includes(pageId)&&!activeBoard)pageId='overviewPage';document.querySelectorAll('nav [data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===pageId));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===pageId));}
 document.querySelectorAll('nav [data-page]').forEach(btn=>btn.addEventListener('click',()=>showPage(btn.dataset.page)));
 $('format').addEventListener('change',()=>{
+ setupFormDirty=true;
  $('customLegsLabel').classList.toggle('hidden',$('format').value!=='custom');
 });
 ['p1','p2','start','doubleIn','doubleOut','format','customLegs'].forEach(id=>$(id).addEventListener('input',()=>{setupFormDirty=true;}));
