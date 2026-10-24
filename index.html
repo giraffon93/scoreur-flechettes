@@ -238,7 +238,7 @@ const order = [20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
 const state = {
   names:['Joueur 1','Joueur 2'], start:501, doubleIn:false, doubleOut:true, format:'legs',
   scores:[501,501], active:0, darts:[], opened:[true,true], legs:[0,0], history:[],
-  saved:[], finished:false, winner:null, legNo:1, matchStarted:false, pendingLegWin:null
+  saved:[], finished:false, winner:null, legNo:1, matchStarted:false, pendingLegWin:null, legStarter:0
 };
 // Connexion Supabase avec la clé publishable (jamais une clé secret/service_role).
 const SUPABASE_URL = 'https://irgsmmsnsxzbjgzjpaus.supabase.co';
@@ -247,6 +247,7 @@ const supabase = window.supabase?.createClient(SUPABASE_URL, SUPABASE_PUBLISHABL
 let cloudReady = false, applyingRemote = false, saveTimer = null, channel = null, isOrganizer = false;
 let lastLocalEditAt = 0;
 let lastAppliedRemoteAt = 0;
+let setupFormDirty = false;
 let remoteBoards = {};
 function setOrganizerUI() {
   const shell=$('appShell');
@@ -269,7 +270,7 @@ function snapshotForCloud() {
   settingsFromForm();
   return {names:[...state.names],start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,format:state.format,
     scores:[...state.scores],active:state.active,darts:state.darts,opened:[...state.opened],legs:[...state.legs],history:state.history,
-    finished:state.finished,winner:state.winner,legNo:state.legNo,matchStarted:state.matchStarted,resultSaved:!!state.resultSaved,saved:getSaved()};
+    finished:state.finished,winner:state.winner,legNo:state.legNo,legStarter:state.legStarter,matchStarted:state.matchStarted,resultSaved:!!state.resultSaved,saved:getSaved()};
 }
 function applyCloudSnapshot(data, remoteUpdatedAt=null) {
   if (!data || typeof data !== 'object' || !Array.isArray(data.names)) return;
@@ -286,7 +287,7 @@ function applyCloudSnapshot(data, remoteUpdatedAt=null) {
     state.active=Number(data.active)||0; state.darts=Array.isArray(data.darts)?data.darts:[];
     state.opened=Array.isArray(data.opened)?data.opened:[true,true]; state.legs=Array.isArray(data.legs)?data.legs:[0,0];
     state.history=Array.isArray(data.history)?data.history:[]; state.finished=!!data.finished; state.winner=data.winner||null;
-    state.legNo=Number(data.legNo)||1; state.matchStarted=!!data.matchStarted; state.resultSaved=!!data.resultSaved;
+    state.legNo=Number(data.legNo)||1; state.legStarter=Number(data.legStarter)===1?1:0; state.matchStarted=!!data.matchStarted; state.resultSaved=!!data.resultSaved;
     $('p1').value=state.names[0]||'Joueur 1'; $('p2').value=state.names[1]||'Joueur 2';
     $('start').value=String(state.start); $('doubleIn').value=state.doubleIn?'yes':'no'; $('doubleOut').value=state.doubleOut?'yes':'no';
     if ([...$('format').options].some(o=>o.value===state.format)) $('format').value=state.format;
@@ -343,7 +344,7 @@ function openBoard(n){
   else {
     state.names=['Joueur 1','Joueur 2']; state.start=501; state.doubleIn=false; state.doubleOut=true; state.format='3';
     state.scores=[501,501]; state.active=0; state.darts=[]; state.opened=[true,true]; state.legs=[0,0]; state.history=[];
-    state.finished=false; state.winner=null; state.legNo=1; state.matchStarted=false; state.pendingLegWin=null; state.turnSnapshot=null;
+    state.finished=false; state.winner=null; state.legNo=1; state.matchStarted=false; state.pendingLegWin=null; state.turnSnapshot=null; state.legStarter=0; state.legStarter=0;
     $('p1').value='Joueur 1'; $('p2').value='Joueur 2'; $('start').value='501'; $('doubleIn').value='no'; $('doubleOut').value='yes'; $('format').value='3';
     render();
   }
@@ -417,11 +418,20 @@ function legsNeeded(){
  const n=Number(state.format);
  return Number.isFinite(n)&&n>=1?n:1;
 }
-function freshLeg(){
- state.scores=[state.start,state.start];state.active=0;state.darts=[];
+function freshLeg(starter=0){
+ state.legStarter=starter===1?1:0;state.scores=[state.start,state.start];state.active=state.legStarter;state.darts=[];
  state.opened=[!state.doubleIn,!state.doubleIn];state.finished=false;state.winner=null;state.turnSnapshot=null;state.pendingLegWin=null;
 }
-function startMatch(){if(!isOrganizer){$('toast').textContent='Connexion organisateur requise pour modifier les scores.';return;}settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;state.resultSaved=false;freshLeg();$('toast').textContent='Nouveau match démarré.';render();showPage('gamePage');window.scrollTo(0,0)}
+function startMatch(){
+ if(!isOrganizer){$('toast').textContent='Connexion organisateur requise pour modifier les scores.';return;}
+ const choice=prompt('Qui a remporté le bull et commence la première manche ?\nTape 1 pour '+($('p1').value.trim()||'Joueur 1')+' ou 2 pour '+($('p2').value.trim()||'Joueur 2')+'.','1');
+ if(choice===null)return;
+ const answer=choice.trim();
+ if(answer!=='1'&&answer!=='2'){alert('Choisis 1 ou 2 pour désigner le joueur qui commence.');return;}
+ const starter=Number(answer)-1;
+ settingsFromForm();setupFormDirty=false;state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;state.resultSaved=false;freshLeg(starter);
+ $('toast').textContent='Nouveau match démarré. '+state.names[starter]+' commence après avoir remporté le bull.';render();showPage('gamePage');window.scrollTo(0,0)
+}
 function sectorPath(cx,cy,r1,r2,a1,a2){
  const p=a=>({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)});
  function point(rad,a){return {x:cx+rad*Math.cos(a),y:cy+rad*Math.sin(a)}}
@@ -593,8 +603,8 @@ function evaluateTurn(){
    announceFinishedMatch();
    return;
   }else{
-   state.legNo++;freshLeg();
-   $('toast').textContent=`Manche validée par ${state.names[p]}. Manche suivante.`;
+   state.legNo++;freshLeg(1-state.legStarter);
+   $('toast').textContent=`Manche validée par ${state.names[p]}. Manche suivante : ${state.names[state.active]} commence (alternance du lancer).`;
   }
   render();return;
  }
@@ -721,6 +731,7 @@ document.querySelectorAll('nav [data-page]').forEach(btn=>btn.addEventListener('
 $('format').addEventListener('change',()=>{
  $('customLegsLabel').classList.toggle('hidden',$('format').value!=='custom');
 });
+['p1','p2','start','doubleIn','doubleOut','format','customLegs'].forEach(id=>$(id).addEventListener('input',()=>{setupFormDirty=true;}));
 $('newMatch').addEventListener('click',startMatch);
 $('saveMatch').addEventListener('click',saveMatch);
 $('miss').addEventListener('click',()=>addDart({label:'Raté',score:0,double:false,mult:'S',n:0}));
@@ -744,7 +755,7 @@ $('finishMatch').addEventListener('click',()=>{
  }
 });
 $('undo').addEventListener('click',undo);
-$('reset').addEventListener('click',()=>{if(!isOrganizer){$('toast').textContent='Connexion organisateur requise.';return;}if(confirm('Réinitialiser le match en cours ?')){settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;freshLeg();$('toast').textContent='Match réinitialisé.';render()}});
+$('reset').addEventListener('click',()=>{if(!isOrganizer){$('toast').textContent='Connexion organisateur requise.';return;}if(confirm('Réinitialiser le match en cours ?')){settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;freshLeg(state.legStarter);$('toast').textContent='Match réinitialisé.';render()}});
 $('resultsBoardFilter')?.addEventListener('change',()=>{selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSaved();const f=$('resultsBoardFilter').value;$('clearSaved').textContent=f==='all'?'Effacer les résultats de toutes les cibles':'Effacer les résultats de la cible '+f;});
 $('clearSaved').addEventListener('click',async()=>{
  if(!isOrganizer){$('toast').textContent='Connexion organisateur requise.';return;}
