@@ -26,6 +26,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .leg-box{width:18px;height:18px;border:1px solid #596373;border-radius:4px;background:#242a34;display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:#aeb7c4;font-weight:800}
 .leg-box.won{background:#25b864;border-color:#49d982;color:#071b0f;box-shadow:0 0 0 1px #25b86455}
 .leg-progress-label{font-size:11px;color:var(--muted);margin-top:5px}
+.player-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:9px;padding-top:8px;border-top:1px solid var(--line)}
+.player-stat{font-size:11px;color:var(--muted)}.player-stat strong{display:block;font-size:17px;color:var(--text);font-variant-numeric:tabular-nums}
 
 .target-wrap{max-width:640px;margin:0 auto}.target-wrap svg{display:block;width:100%;height:auto;touch-action:manipulation}
 .sector{cursor:pointer;stroke:#111;stroke-width:1.2}.sector:hover{stroke:#ffe28a;stroke-width:3;filter:brightness(1.2)}
@@ -193,9 +195,9 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
   </div>
 </section>
 <section class="panel"><h2>Score en cours</h2>  <div class="scores">
-    <div id="player0" class="player"><div class="name" id="name0">Joueur 1</div><div class="score" id="score0">501</div><div class="small" id="legs0">Manches : 0</div><div class="leg-progress" id="legBoxes0" aria-label="Progression des manches du joueur 1"></div></div>
+    <div id="player0" class="player"><div class="name" id="name0">Joueur 1</div><div class="score" id="score0">501</div><div class="small" id="legs0">Manches : 0</div><div class="leg-progress" id="legBoxes0" aria-label="Progression des manches du joueur 1"></div><div class="player-stats"><div class="player-stat">Moyenne / 3 fléchettes<strong id="average0">0,0</strong></div><div class="player-stat">Fléchettes lancées<strong id="dartCount0">0</strong></div></div></div>
     <div style="font-weight:800;color:var(--muted)">VS</div>
-    <div id="player1" class="player"><div class="name" id="name1">Joueur 2</div><div class="score" id="score1">501</div><div class="small" id="legs1">Manches : 0</div><div class="leg-progress" id="legBoxes1" aria-label="Progression des manches du joueur 2"></div></div>
+    <div id="player1" class="player"><div class="name" id="name1">Joueur 2</div><div class="score" id="score1">501</div><div class="small" id="legs1">Manches : 0</div><div class="leg-progress" id="legBoxes1" aria-label="Progression des manches du joueur 2"></div><div class="player-stats"><div class="player-stat">Moyenne / 3 fléchettes<strong id="average1">0,0</strong></div><div class="player-stat">Fléchettes lancées<strong id="dartCount1">0</strong></div></div></div>
   </div>
   <div class="grid2">
     <div><div class="muted">Joueur actif</div><strong id="activeName">Joueur 1</strong></div>
@@ -931,10 +933,31 @@ function undo(){
  $('toast').textContent='Dernière fléchette annulée : '+(removed.displayLabel||removed.label)+'.';
  render();
 }
+function getPlayerStats(playerIndex){
+  let points=0,dartsThrown=0;
+  // Les volées validées sont la source de référence. Une volée BUST compte
+  // comme zéro point, mais les fléchettes lancées restent comptabilisées.
+  for(const turn of state.history){
+    if(Number(turn.playerIndex)!==playerIndex)continue;
+    const count=Array.isArray(turn.darts)?turn.darts.length:0;
+    dartsThrown+=count;
+    if(turn.status!=='BUST') points+=Number(turn.total)||0;
+  }
+  // Ajouter les fléchettes de la volée en cours, même avant validation.
+  if(state.active===playerIndex){
+    dartsThrown+=state.darts.length;
+    if(!state.darts.some(d=>d.bust)) points+=state.darts.reduce((sum,d)=>sum+(Number(d.counted)||0),0);
+  }
+  const average=dartsThrown?points/dartsThrown*3:0;
+  return {average,dartsThrown};
+}
 function render(){
  for(let p=0;p<2;p++){
   $('name'+p).textContent=state.names[p];$('score'+p).textContent=state.scores[p];
   $('legs'+p).textContent=`Manches : ${state.legs[p]}`;
+   const stats=getPlayerStats(p);
+   $('average'+p).textContent=stats.average.toLocaleString('fr-BE',{minimumFractionDigits:1,maximumFractionDigits:1});
+   $('dartCount'+p).textContent=String(stats.dartsThrown);
   const boxes=$('legBoxes'+p);
   if(boxes){
    boxes.innerHTML='';
