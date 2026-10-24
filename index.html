@@ -101,9 +101,9 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
   <span id="authStatus" class="muted">Mode consultation</span>
 </div>
 <nav aria-label="Menu principal">
-<button class="active" data-page="overviewPage">Vue des cibles</button><button data-page="boardSelectPage">Choisir une cible</button><button class="board-only hidden" data-page="setupPage">Préparation</button>
+<button class="active" data-page="overviewPage">Vue des cibles</button><button class="organizer-only hidden" data-page="boardSelectPage">Choisir une cible</button><button class="board-only hidden" data-page="setupPage">Préparation</button>
 <button class="board-only hidden" data-page="gamePage">Cible & score</button>
-<button class="board-only hidden" data-page="resultsPage">Résultats</button>
+<button data-page="resultsPage">Résultats</button>
 </nav>
 <div class="board-pill" id="boardPill" style="display:none">Cible active : <strong id="activeBoardLabel">—</strong></div>
 </header>
@@ -217,7 +217,7 @@ function showApp(){
 // L'accueil est la vue d'ensemble. Une cible s'ouvre depuis sa carte.
 
 showApp();
-showPage('overviewPage');
+// L'onglet Vue des cibles est actif par défaut.
 const order = [20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
 const state = {
   names:['Joueur 1','Joueur 2'], start:501, doubleIn:false, doubleOut:true, format:'legs',
@@ -241,6 +241,9 @@ function setOrganizerUI() {
   $('emailLabel').classList.toggle('hidden',isOrganizer);
   $('passwordLabel').classList.toggle('hidden',isOrganizer);
   $('authStatus').textContent=isOrganizer?'Organisateur connecté — modification autorisée':'Mode consultation — connexion organisateur requise pour modifier';
+  updateBoardNav();
+  if(!isOrganizer && ['boardSelectPage','setupPage','gamePage'].includes(document.querySelector('.page.active')?.id)) showPage('overviewPage');
+  renderSaved();
 }
 function cloudMessage(msg, ok=false) {
   const el = $('cloudStatus');
@@ -289,7 +292,7 @@ async function loadBoardStates() {
   const {data,error}=await supabase.from('dart_boards').select('board_number,match_state,updated_at').order('board_number');
   if(error){cloudMessage('Lecture Supabase impossible : '+error.message);return;}
   remoteBoards={}; (data||[]).forEach(row=>remoteBoards[String(row.board_number)]=row);
-  renderLiveBoards(); renderBoardPicker(); cloudReady=true;
+  renderLiveBoards(); renderBoardPicker(); renderSaved(); cloudReady=true;
   if(activeBoard && remoteBoards[String(activeBoard)]?.match_state?.names) applyCloudSnapshot(remoteBoards[String(activeBoard)].match_state, remoteBoards[String(activeBoard)].updated_at);
   cloudMessage('Connecté à Supabase · lecture en direct activée',true);
 }
@@ -312,7 +315,7 @@ $('selectAllBoards')?.addEventListener('click',()=>setSelectedOverviewBoards([1,
 $('selectNoBoards')?.addEventListener('click',()=>setSelectedOverviewBoards([]));
 function openBoard(n){
   const selected=String(n);
-  if(!boardNames[selected]) return;
+  if(!boardNames[selected] || !isOrganizer) return;
   activeBoard=selected;
   try{sessionStorage.setItem('dartsActiveBoard',activeBoard)}catch(e){}
   $('activeBoardLabel').textContent=boardNames[activeBoard];
@@ -366,7 +369,7 @@ function queueCloudSave(){if(applyingRemote||!activeBoard||!cloudReady||!isOrgan
 function startRealtime(){
   if(!supabase)return; if(channel)supabase.removeChannel(channel);
   channel=supabase.channel('dart-boards-live').on('postgres_changes',{event:'*',schema:'public',table:'dart_boards'},payload=>{
-    const row=payload.new;if(!row?.board_number)return; remoteBoards[String(row.board_number)]=row;renderLiveBoards();renderBoardPicker();
+    const row=payload.new;if(!row?.board_number)return; remoteBoards[String(row.board_number)]=row;renderLiveBoards();renderBoardPicker();renderSaved();
     if(String(row.board_number)===String(activeBoard)&&row.match_state?.names&&!applyingRemote)applyCloudSnapshot(row.match_state,row.updated_at);
   }).subscribe(status=>{if(status==='SUBSCRIBED')cloudMessage('Connecté à Supabase · mises à jour en direct',true);});
 }
@@ -672,8 +675,14 @@ function saveMatch(){
  const saved=getSaved();saved.push(record);try{localStorage.setItem(savedStorageKey(),JSON.stringify(saved));$('toast').textContent='Résultat enregistré puis synchronisé dès que possible.';}catch(e){$('toast').textContent='Le navigateur bloque le stockage local : le résultat ne peut pas être conservé.';}renderSaved();
 }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function updateBoardNav(){document.querySelectorAll('nav .board-only').forEach(b=>b.classList.toggle('hidden',!activeBoard));}
-function showPage(pageId){if(['setupPage','gamePage','resultsPage'].includes(pageId)&&!activeBoard)pageId='overviewPage';document.querySelectorAll('nav [data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===pageId));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===pageId));}
+function updateBoardNav(){
+ document.querySelectorAll('nav .board-only').forEach(b=>b.classList.toggle('hidden',!isOrganizer||!activeBoard));
+ document.querySelectorAll('nav .organizer-only').forEach(b=>b.classList.toggle('hidden',!isOrganizer));
+ const pill=$('boardPill'); if(pill)pill.style.display=isOrganizer&&activeBoard?'block':'none';
+}
+function showPage(pageId){
+ if(!isOrganizer && !['overviewPage','resultsPage'].includes(pageId))pageId='overviewPage';
+ if(isOrganizer && ['setupPage','gamePage'].includes(pageId)&&!activeBoard)pageId='overviewPage';document.querySelectorAll('nav [data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===pageId));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===pageId));}
 document.querySelectorAll('nav [data-page]').forEach(btn=>btn.addEventListener('click',()=>showPage(btn.dataset.page)));
 $('format').addEventListener('change',()=>{
  $('customLegsLabel').classList.toggle('hidden',$('format').value!=='custom');
