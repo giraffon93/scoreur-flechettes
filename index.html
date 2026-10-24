@@ -648,7 +648,7 @@ function renderSaved(){
  matches.forEach(m=>{
   const div=document.createElement('button');div.type='button';div.className='match-card';div.style.textAlign='left';div.style.width='100%';
   div.innerHTML=`<div class="match-head"><strong>${escapeHtml(m.names?.[0]||'Joueur 1')} ${m.legs?.[0]??0}–${m.legs?.[1]??0} ${escapeHtml(m.names?.[1]||'Joueur 2')}</strong><span class="tag">${escapeHtml(m.winner||(m.finished?'Terminé':'En cours'))}</span></div><div class="muted">Cible ${escapeHtml(m.target||'—')} · ${escapeHtml(m.date||'Date inconnue')} · départ ${m.start||501} · ${m.doubleIn?'Double In':'Simple In'} · ${m.doubleOut?'Double Out':'Sortie libre'}</div><div class="help" style="margin-top:6px">Cliquer pour voir les volées</div>`;
-  div.addEventListener('click',()=>{selectedHistoryMatch=m;selectedHistoryMatchKey=savedMatchKey(m);renderSelectedMatchHistory(m);});
+  div.addEventListener('click',()=>{const key=savedMatchKey(m);if(selectedHistoryMatchKey===key){selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSelectedMatchHistory(null);}else{selectedHistoryMatch=m;selectedHistoryMatchKey=key;renderSelectedMatchHistory(m);}});
   el.appendChild(div);
  });
  if(selectedHistoryMatchKey){
