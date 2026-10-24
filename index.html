@@ -911,7 +911,7 @@ function render(){
   const d=state.darts[i];$('dart'+i).innerHTML=`Fléchette ${i+1}<b>${d?(d.displayLabel||d.label)+' · '+d.score:'—'}</b>`;
  }
  $('matchStatus').textContent=!state.matchStarted?'Configure les joueurs puis démarre un match.':state.finished?(state.winner?`Terminé : ${state.winner} gagne ${state.legs[0]}–${state.legs[1]}.`:`Match terminé manuellement · Score ${state.legs[0]}–${state.legs[1]}.`): `Match en cours · Manche ${state.legNo} · Premier à ${legsNeeded()} manche(s) · ${state.doubleIn?'Double In':'Simple In'} · ${state.doubleOut?'Double Out':'Sortie libre'}`;
- renderHistory();renderSaved();renderLiveBoards();queueCloudSave();
+ renderHistory();renderSaved();renderLiveBoards();updateBoardNav();queueCloudSave();
 }
 function renderHistory(){
  const el=$('history');el.innerHTML='';
@@ -985,6 +985,9 @@ function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;',
 function updateBoardNav(){
  document.querySelectorAll('nav .board-only').forEach(b=>b.classList.toggle('hidden',!isOrganizer||!activeBoard));
  document.querySelectorAll('nav .organizer-only').forEach(b=>b.classList.toggle('hidden',!isOrganizer));
+ // La préparation n'est plus accessible pendant un match actif ; elle revient une fois le match terminé.
+ const setupTab=document.querySelector('nav [data-page="setupPage"]');
+ if(setupTab)setupTab.classList.toggle('hidden',!isOrganizer||!activeBoard||(state.matchStarted&&!state.finished));
  const pill=$('boardPill'); if(pill)pill.style.display=isOrganizer&&activeBoard?'block':'none';
 }
 function showPage(pageId){
