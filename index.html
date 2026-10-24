@@ -117,8 +117,8 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
   <span id="authStatus" class="muted">Mode consultation</span>
 </div>
 <nav aria-label="Menu principal">
-<button class="active" data-page="overviewPage">Vue des cibles</button><button class="organizer-only hidden" data-page="playersPage">Joueurs</button><button class="organizer-only hidden" data-page="boardSelectPage">Choisir une cible</button><button class="board-only hidden" data-page="setupPage" aria-hidden="true" tabindex="-1">Préparation</button>
-<button class="board-only hidden" data-page="gamePage" aria-hidden="true" tabindex="-1">Cible & score</button>
+<button class="active" data-page="overviewPage">Vue des cibles</button><button class="organizer-only hidden" data-page="playersPage">Joueurs</button><button class="organizer-only hidden" data-page="boardSelectPage">Choisir une cible</button><button class="board-only hidden" data-page="setupPage">Préparation</button>
+<button class="board-only hidden" data-page="gamePage">Cible & score</button>
 <button data-page="resultsPage">Résultats</button>
 </nav>
 <div class="board-pill" id="boardPill" style="display:none">Cible active : <strong id="activeBoardLabel">—</strong></div>
@@ -140,7 +140,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 </section>
 </div>
 <div id="boardSelectPage" class="page">
-<section class="panel"><h2>Choisir une cible</h2><p class="help">Choisis une cible : si elle est libre, tu accèdes à la préparation ; si un match est en cours, tu reprends directement le score.</p><div id="boardPickerGrid" class="board-picker-grid"><div class="muted">Chargement des cibles…</div></div></section>
+<section class="panel"><h2>Choisir une cible</h2><p class="help">Sélectionne une cible pour accéder à sa préparation, au score et aux résultats.</p><div id="boardPickerGrid" class="board-picker-grid"><div class="muted">Chargement des cibles…</div></div></section>
 </div>
 <div id="setupPage" class="page">
 <div class="setup-layout">
@@ -206,7 +206,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
     <div class="dart" id="dart1">Fléchette 2<b>—</b></div>
     <div class="dart" id="dart2">Fléchette 3<b>—</b></div>
   </div>
-  <div class="actions" style="margin-top:12px"><button id="undo">Annuler dernier tir</button><button class="primary" id="endTurn">Valider la volée</button><button class="danger" id="finishMatch">Terminer le match</button><button class="danger" id="reset">Réinitialiser le match</button></div>
+  <div class="actions" style="margin-top:12px"><button id="undo">Annuler tir / volée</button><button class="primary" id="endTurn">Valider la volée</button><button class="danger" id="finishMatch">Terminer le match</button><button class="danger" id="reset">Réinitialiser le match</button></div>
   <div id="toast" role="status"></div>
 </section>
 </div>
@@ -543,7 +543,8 @@ function renderLiveBoards() {
   for(const n of selected){
     const row=remoteBoards[String(n)],d=row?.match_state||{},inProgress=!!d.matchStarted&&!d.finished;
     const status=inProgress?`En cours · ${d.scores?.[0]??'—'} – ${d.scores?.[1]??'—'}`:'Cible disponible pour un nouveau match';
-    const names=Array.isArray(d.names)?d.names:['Joueur 1','Joueur 2'];
+    // N'afficher les noms que si la cible a réellement un match en cours.
+    const names=inProgress&&Array.isArray(d.names)?d.names:['—','—'];
     const card=document.createElement('div');card.className='match-card'+(inProgress?' current':'');
     card.innerHTML=`<div class="match-head"><strong>Cible ${n} · ${escapeHtml(names[0])} / ${escapeHtml(names[1])}</strong><span class="tag ${inProgress?'status-live':'status-free'}">${inProgress?'EN COURS':'LIBRE'}</span></div><div>${escapeHtml(status)}</div><div class="muted">${d.legs?`Manches : ${d.legs[0]||0} – ${d.legs[1]||0}`:''}${row?.updated_at?' · Mis à jour : '+new Date(row.updated_at).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):''}</div>`;
     el.appendChild(card);
@@ -555,8 +556,10 @@ function renderBoardPicker(){
   for(let n=1;n<=8;n++){
     const row=remoteBoards[String(n)],d=row?.match_state||{},inProgress=!!d.matchStarted&&!d.finished;
     const status=inProgress?`EN COURS · ${d.scores?.[0]??'—'} – ${d.scores?.[1]??'—'}`:'LIBRE';
-    const names=Array.isArray(d.names)?d.names:['Joueur 1','Joueur 2'];
-    const btn=document.createElement('button');btn.type='button';btn.innerHTML=`<strong>Cible ${n}${String(n)===String(activeBoard)?' · Sélectionnée':''}</strong><span class="tag ${inProgress?'status-live':'status-free'}" style="display:inline-block;margin:2px 0 6px">${escapeHtml(status)}</span><span class="board-player-names">${escapeHtml(names[0])} / ${escapeHtml(names[1])}</span>`;
+    // Les anciens noms ne doivent pas rester visibles quand la cible est libre.
+    const names=inProgress&&Array.isArray(d.names)?d.names:['Aucun match',''];
+    const playerLabel=inProgress?`${escapeHtml(names[0])} / ${escapeHtml(names[1])}`:'Prête pour un nouveau match';
+    const btn=document.createElement('button');btn.type='button';btn.innerHTML=`<strong>Cible ${n}${String(n)===String(activeBoard)?' · Sélectionnée':''}</strong><span class="tag ${inProgress?'status-live':'status-free'}" style="display:inline-block;margin:2px 0 6px">${escapeHtml(status)}</span><span class="board-player-names">${playerLabel}</span>`;
     if(inProgress)btn.style.borderColor='#25b864';
     btn.addEventListener('click',()=>openBoard(n));el.appendChild(btn);
   }
@@ -732,7 +735,11 @@ function ensureTurnSnapshot(){
    score:state.scores[state.active],
    opened:state.opened[state.active],
    dartsBefore:state.darts.length,
-   historyLength:state.history.length
+   historyLength:state.history.length,
+   // Snapshot complet pour pouvoir annuler une volée déjà validée.
+   scores:[...state.scores], active:state.active, openedAll:[...state.opened],
+   legs:[...state.legs], legNo:state.legNo, legStarter:state.legStarter,
+   finished:state.finished, winner:state.winner, matchStarted:state.matchStarted
   };
  }
 }
@@ -764,7 +771,7 @@ function addDart(d){
    state.history.unshift({
     player:state.names[p],playerIndex:p,darts:state.darts.map(x=>x.displayLabel),
     total:state.darts.reduce((a,x)=>a+x.counted,0),before:snap.score,after:snap.score,status:'BUST',
-    leg:state.legNo,turn:state.history.length+1
+    leg:state.legNo,turn:state.history.length+1,undoState:{...snap}
    });
    state.darts=[];
    state.active=1-p;
@@ -797,7 +804,7 @@ function completeTurn(message){
  const status=(!snap.opened&&!state.opened[p])?'DOUBLE IN non atteint':'OK';
  state.history.unshift({
   player:state.names[p],playerIndex:p,darts:labels,total:counted,before:snap.score,
-  after:state.scores[p],status,leg:state.legNo,turn:state.history.length+1
+  after:state.scores[p],status,leg:state.legNo,turn:state.history.length+1,undoState:{...snap}
  });
  state.darts=[];state.turnSnapshot=null;
  state.active=1-p;
@@ -824,10 +831,7 @@ async function releaseBoardAndReturnToSetup(message){
   $('toast').textContent=message;
   render();
   if(supabase&&cloudReady&&isOrganizer&&activeBoard) await saveBoardState();
-  activeBoard=null;
-  try{sessionStorage.removeItem('dartsActiveBoard')}catch(e){}
-  updateBoardNav();
-  showPage('boardSelectPage');
+  showPage('setupPage');
   window.scrollTo(0,0);
 }
 function announceFinishedMatch(){
@@ -845,7 +849,7 @@ function evaluateTurn(){
   state.history.unshift({
    player:state.names[p],playerIndex:p,darts:state.darts.map(x=>x.displayLabel||x.label),
    total:state.darts.reduce((a,x)=>a+(x.counted||0),0),
-   before:snap.score,after:0,status:'OK',leg:state.legNo,turn:state.history.length+1
+   before:snap.score,after:0,status:'OK',leg:state.legNo,turn:state.history.length+1,undoState:{...snap}
   });
   state.darts=[];state.turnSnapshot=null;state.pendingLegWin=null;
   state.legs[p]++;
@@ -864,11 +868,36 @@ function evaluateTurn(){
  completeTurn('Volée validée manuellement.');
 }
 function undo(){
- if(!state.darts.length){$('toast').textContent='Aucune fléchette à annuler dans la volée en cours.';return}
+ // Si la volée a déjà été validée, annule toute la dernière volée et revient au joueur qui l'a lancée.
+ if(!state.darts.length){
+  const last=state.history[0];
+  if(!last){$('toast').textContent='Aucune fléchette ou volée à annuler.';return;}
+  const snap=last.undoState;
+  state.history.shift();
+  if(snap&&Array.isArray(snap.scores)){
+   state.scores=[...snap.scores];
+   state.active=Number(snap.active)||0;
+   state.opened=Array.isArray(snap.openedAll)?[...snap.openedAll]:state.opened;
+   state.legs=Array.isArray(snap.legs)?[...snap.legs]:state.legs;
+   state.legNo=Number(snap.legNo)||1;
+   state.legStarter=Number(snap.legStarter)===1?1:0;
+   state.finished=!!snap.finished;state.winner=snap.winner||null;
+   state.matchStarted=snap.matchStarted!==false;
+  }else{
+   // Compatibilité avec les anciennes volées enregistrées avant l'ajout de l'annulation complète.
+   const p=Number.isInteger(last.playerIndex)?last.playerIndex:state.active;
+   if(Number.isFinite(Number(last.before)))state.scores[p]=Number(last.before);
+   state.active=p;
+  }
+  state.darts=[];state.turnSnapshot=null;state.pendingLegWin=null;state.resultSaved=false;
+  $('toast').textContent='Dernière volée validée annulée. Tu peux relancer les trois fléchettes.';
+  render();return;
+ }
  const p=state.active;
  const removed=state.darts.pop();
  const snap=state.turnSnapshot;
  if(!snap){$('toast').textContent='Impossible d’annuler ce tir.';render();return}
+ state.pendingLegWin=null;
  // Recalculate the current visit from its start, preserving Double-In rules.
  state.scores[p]=snap.score;
  state.opened[p]=snap.opened;
@@ -986,9 +1015,11 @@ function saveMatch(){
 }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function updateBoardNav(){
- // Préparation et Cible & score sont des écrans de parcours, pas des onglets.
- document.querySelectorAll('nav .board-only').forEach(b=>b.classList.add('hidden'));
+ document.querySelectorAll('nav .board-only').forEach(b=>b.classList.toggle('hidden',!isOrganizer||!activeBoard));
  document.querySelectorAll('nav .organizer-only').forEach(b=>b.classList.toggle('hidden',!isOrganizer));
+ // La préparation n'est plus accessible pendant un match actif ; elle revient une fois le match terminé.
+ const setupTab=document.querySelector('nav [data-page="setupPage"]');
+ if(setupTab)setupTab.classList.toggle('hidden',!isOrganizer||!activeBoard||(state.matchStarted&&!state.finished));
  const pill=$('boardPill'); if(pill)pill.style.display=isOrganizer&&activeBoard?'block':'none';
 }
 function showPage(pageId){
