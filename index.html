@@ -41,8 +41,12 @@ button:disabled{opacity:.45;cursor:not-allowed}
 #liveBoards .tag{align-self:flex-start}
 #liveBoards .actions{margin-top:auto!important}
 #liveBoards .actions button{padding:7px 5px;font-size:12px}
+.board-picker-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.board-picker-grid button{min-height:76px;text-align:left}
+.board-picker-grid button strong{display:block;font-size:16px;margin-bottom:4px}
+.board-picker-grid button span{font-size:12px;color:var(--muted);font-weight:400}
 @media(max-width:1000px){#liveBoards{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:520px){#liveBoards{grid-template-columns:1fr}}
+@media(max-width:520px){#liveBoards{grid-template-columns:1fr}.board-picker-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 hr{border:0;border-top:1px solid var(--line);margin:16px 0}
 #toast{min-height:20px;color:#f1d27c;font-size:13px;margin-top:8px}
@@ -72,16 +76,16 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 <section id="accessScreen" class="access-screen">
   <div class="access-card">
     <h1>Scoreur de fléchettes</h1>
-    <p>Choisis la planche sur laquelle tu joues.</p>
-    <label>Planche
+    <p>Choisis la cible sur laquelle tu joues.</p>
+    <label>Cible
       <select id="boardChoice">
-        <option value="1">Planche 1</option><option value="2">Planche 2</option>
-        <option value="3">Planche 3</option><option value="4">Planche 4</option>
-        <option value="5">Planche 5</option><option value="6">Planche 6</option>
-        <option value="7">Planche 7</option><option value="8">Planche 8</option>
+        <option value="1">Cible 1</option><option value="2">Cible 2</option>
+        <option value="3">Cible 3</option><option value="4">Cible 4</option>
+        <option value="5">Cible 5</option><option value="6">Cible 6</option>
+        <option value="7">Cible 7</option><option value="8">Cible 8</option>
       </select>
     </label>
-    <button id="accessButton" class="primary" type="button">Ouvrir la planche</button>
+    <button id="accessButton" class="primary" type="button">Ouvrir la cible</button>
     <p id="accessMessage" role="status" aria-live="polite" style="min-height:20px;margin:8px 0 0;color:#f1d27c;font-size:13px"></p>
     <p class="access-warning">Consultation publique : les scores sont visibles sans connexion. Seul l’organisateur connecté peut modifier les matchs.</p>
   </div>
@@ -97,16 +101,18 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
   <span id="authStatus" class="muted">Mode consultation</span>
 </div>
 <nav aria-label="Menu principal">
-<button class="active" data-page="overviewPage">Vue des planches</button><button data-page="setupPage">Préparation</button>
-<button data-page="gamePage">Cible & score</button>
-<button data-page="resultsPage">Résultats</button>
+<button class="active" data-page="overviewPage">Vue des cibles</button><button data-page="boardSelectPage">Choisir une cible</button><button class="board-only hidden" data-page="setupPage">Préparation</button>
+<button class="board-only hidden" data-page="gamePage">Cible & score</button>
+<button class="board-only hidden" data-page="resultsPage">Résultats</button>
 </nav>
-<div class="board-pill">Planche active : <strong id="activeBoardLabel">—</strong></div>
-<button id="switchBoard" type="button" style="width:auto;margin-top:10px">Changer de planche</button>
+<div class="board-pill" id="boardPill" style="display:none">Cible active : <strong id="activeBoardLabel">—</strong></div>
 </header>
 <main>
 <div id="overviewPage" class="page active">
-<section class="panel"><h2>Récapitulatif des planches</h2><p class="help">Sélectionne les planches à afficher. Ton choix est conservé sur cet ordinateur et ne change pas les données des matchs.</p><div id="boardFilters" aria-label="Sélection des planches"></div><div class="actions" style="margin-bottom:12px"><button type="button" id="selectAllBoards">Tout sélectionner</button><button type="button" id="selectNoBoards">Tout décocher</button></div><div id="liveBoards" class="list"><div class="muted">Chargement des planches…</div></div><p id="boardSelectionCount" class="help" aria-live="polite"></p></section>
+<section class="panel"><h2>Vue des cibles</h2><p class="help">Sélectionne les cibles à afficher. Ton choix est conservé sur cet ordinateur et ne change pas les données des matchs.</p><div id="boardFilters" aria-label="Sélection des cibles"></div><div class="actions" style="margin-bottom:12px"><button type="button" id="selectAllBoards">Tout sélectionner</button><button type="button" id="selectNoBoards">Tout décocher</button></div><div id="liveBoards" class="list"><div class="muted">Chargement des cibles…</div></div><p id="boardSelectionCount" class="help" aria-live="polite"></p></section>
+</div>
+<div id="boardSelectPage" class="page">
+<section class="panel"><h2>Choisir une cible</h2><p class="help">Sélectionne une cible pour accéder à sa préparation, au score et aux résultats.</p><div id="boardPickerGrid" class="board-picker-grid"><div class="muted">Chargement des cibles…</div></div></section>
 </div>
 <div id="setupPage" class="page">
 <div class="setup-layout">
@@ -182,7 +188,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
   <div class="actions"><button id="clearSaved" class="danger">Effacer la liste</button><button id="export">Exporter les résultats CSV</button></div>
   <p class="help">Les résultats sont synchronisés avec Supabase et partagés entre les appareils.</p>
   <div id="savedMatches" class="list"></div>
-  <h3>Historique du match courant</h3><div id="history" class="list"></div>
+  <h3>Volées du match sélectionné</h3><p class="help">Clique sur un match dans la liste pour consulter ses volées.</p><div id="history" class="list"><div class="muted">Aucun match sélectionné.</div></div>
 </section>
 </div>
 </main>
@@ -192,9 +198,9 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const boardNames = {'1':'Planche 1','2':'Planche 2','3':'Planche 3','4':'Planche 4','5':'Planche 5','6':'Planche 6','7':'Planche 7','8':'Planche 8'};
-// Au démarrage, afficher directement la vue d'ensemble.
-// Une planche est choisie en cliquant sur sa carte dans le récapitulatif.
+const boardNames = {'1':'Cible 1','2':'Cible 2','3':'Cible 3','4':'Cible 4','5':'Cible 5','6':'Cible 6','7':'Cible 7','8':'Cible 8'};
+// Au démarrage, afficher directement la vue d’ensemble.
+// Une cible se choisit dans l’onglet dédié.
 let activeBoard = '';
 try { sessionStorage.removeItem('dartsActiveBoard'); } catch (e) {}
 function savedStorageKey(){ return 'dartsSavedMatches_board_' + (activeBoard || 'none'); }
@@ -207,38 +213,8 @@ function showApp(){
   $('appShell').classList.remove('hidden');
   $('activeBoardLabel').textContent = boardNames[activeBoard] || '—';
 }
-$('accessButton').addEventListener('click',()=>{
-  const selected = $('boardChoice').value;
-  if (!boardNames[selected]) {
-    $('accessMessage').textContent = 'Sélectionne une planche valide.';
-    return;
-  }
-  activeBoard = selected;
-  try { sessionStorage.setItem('dartsActiveBoard', activeBoard); } catch (e) { /* La sélection reste active en mémoire si le stockage est bloqué. */ }
-  $('accessMessage').textContent = '';
-  showApp();
-  showPage('setupPage');
-  const row = remoteBoards[String(activeBoard)];
-  if (row?.match_state?.names) {
-    applyCloudSnapshot(row.match_state);
-  } else {
-    state.names=['Joueur 1','Joueur 2']; state.start=501; state.doubleIn=false; state.doubleOut=true; state.format='3';
-    state.history=[]; state.legs=[0,0]; state.matchStarted=false; state.legNo=1; state.finished=false; state.winner=null;
-    $('p1').value=state.names[0]; $('p2').value=state.names[1]; $('start').value='501'; $('doubleIn').value='no'; $('doubleOut').value='yes'; $('format').value='3';
-    freshLeg(); render();
-  }
-  renderSaved();
-  window.scrollTo(0, 0);
-});
-$('switchBoard').addEventListener('click',()=>{
-  try { sessionStorage.removeItem('dartsActiveBoard'); } catch (e) {}
-  activeBoard='';
-  $('activeBoardLabel').textContent='—';
-  showApp();
-  showPage('overviewPage');
-  window.scrollTo(0, 0);
-});
-// Ne plus demander de choisir une planche au lancement : la vue d'ensemble est l'accueil.
+// L'accueil est la vue d'ensemble. Une cible s'ouvre depuis sa carte.
+
 showApp();
 showPage('overviewPage');
 const order = [20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
@@ -295,7 +271,7 @@ async function loadBoardStates() {
   const {data,error}=await supabase.from('dart_boards').select('board_number,match_state,updated_at').order('board_number');
   if(error){cloudMessage('Lecture Supabase impossible : '+error.message);return;}
   remoteBoards={}; (data||[]).forEach(row=>remoteBoards[String(row.board_number)]=row);
-  renderLiveBoards(); cloudReady=true;
+  renderLiveBoards(); renderBoardPicker(); cloudReady=true;
   if(activeBoard && remoteBoards[String(activeBoard)]?.match_state?.names) applyCloudSnapshot(remoteBoards[String(activeBoard)].match_state);
   cloudMessage('Connecté à Supabase · lecture en direct activée',true);
 }
@@ -311,28 +287,57 @@ function setSelectedOverviewBoards(values){
 }
 function renderBoardFilters(){
   const el=$('boardFilters'); if(!el)return; const selected=getSelectedOverviewBoards(); el.innerHTML='';
-  for(let n=1;n<=8;n++){ const label=document.createElement('label'); const cb=document.createElement('input'); cb.type='checkbox'; cb.value=String(n); cb.checked=selected.includes(n); cb.addEventListener('change',()=>{const next=getSelectedOverviewBoards();setSelectedOverviewBoards(cb.checked?[...next,n]:next.filter(x=>x!==n));}); label.append(cb,document.createTextNode('Planche '+n)); el.appendChild(label); }
-  const count=$('boardSelectionCount'); if(count)count.textContent=selected.length+' planche'+(selected.length===1?'':'s')+' affichée'+(selected.length===1?'':'s')+'.';
+  for(let n=1;n<=8;n++){ const label=document.createElement('label'); const cb=document.createElement('input'); cb.type='checkbox'; cb.value=String(n); cb.checked=selected.includes(n); cb.addEventListener('change',()=>{const next=getSelectedOverviewBoards();setSelectedOverviewBoards(cb.checked?[...next,n]:next.filter(x=>x!==n));}); label.append(cb,document.createTextNode('Cible '+n)); el.appendChild(label); }
+  const count=$('boardSelectionCount'); if(count)count.textContent=selected.length+' cible'+(selected.length===1?'':'s')+' affichée'+(selected.length===1?'':'s')+'.';
 }
 $('selectAllBoards')?.addEventListener('click',()=>setSelectedOverviewBoards([1,2,3,4,5,6,7,8]));
 $('selectNoBoards')?.addEventListener('click',()=>setSelectedOverviewBoards([]));
+function openBoard(n){
+  const selected=String(n);
+  if(!boardNames[selected]) return;
+  activeBoard=selected;
+  try{sessionStorage.setItem('dartsActiveBoard',activeBoard)}catch(e){}
+  $('activeBoardLabel').textContent=boardNames[activeBoard];
+  $('boardPill').style.display='block';
+  updateBoardNav();
+  showApp();
+  const row=remoteBoards[String(activeBoard)];
+  if(row?.match_state?.names){applyCloudSnapshot(row.match_state);}
+  else {
+    state.names=['Joueur 1','Joueur 2']; state.start=501; state.doubleIn=false; state.doubleOut=true; state.format='3';
+    state.scores=[501,501]; state.active=0; state.darts=[]; state.opened=[true,true]; state.legs=[0,0]; state.history=[];
+    state.finished=false; state.winner=null; state.legNo=1; state.matchStarted=false; state.pendingLegWin=null; state.turnSnapshot=null;
+    $('p1').value='Joueur 1'; $('p2').value='Joueur 2'; $('start').value='501'; $('doubleIn').value='no'; $('doubleOut').value='yes'; $('format').value='3';
+    render();
+  }
+  renderSaved();
+  showPage('setupPage');
+  window.scrollTo(0,0);
+}
+
 function renderLiveBoards() {
   const el=$('liveBoards'); if(!el)return; el.innerHTML=''; const selected=getSelectedOverviewBoards();
-  if(!selected.length){el.innerHTML='<div class="muted">Aucune planche sélectionnée. Coche une ou plusieurs planches ci-dessus.</div>';renderBoardFilters();return;}
+  if(!selected.length){el.innerHTML='<div class="muted">Aucune cible sélectionnée. Coche une ou plusieurs cibles ci-dessus.</div>';renderBoardFilters();return;}
   for(const n of selected){
     const row=remoteBoards[String(n)],d=row?.match_state||{},inProgress=!!d.matchStarted&&!d.finished;
     const status=!d.matchStarted?'Aucun match en cours':d.finished?'Match terminé':`En cours · ${d.scores?.[0]??'—'} – ${d.scores?.[1]??'—'}`;
     const names=Array.isArray(d.names)?d.names:['Joueur 1','Joueur 2'];
     const card=document.createElement('div');card.className='match-card'+(inProgress?' current':'');
-    card.innerHTML=`<div class="match-head"><strong>Planche ${n} · ${escapeHtml(names[0])} / ${escapeHtml(names[1])}</strong><span class="tag">${inProgress?'EN COURS':d.finished?'TERMINÉ':'LIBRE'}</span></div><div>${escapeHtml(status)}</div><div class="muted">${d.legs?`Manches : ${d.legs[0]||0} – ${d.legs[1]||0}`:''}${row?.updated_at?' · Mis à jour : '+new Date(row.updated_at).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):''}</div><div class="actions" style="margin-top:8px"><button type="button" data-open-board="${n}">Ouvrir cette planche</button></div>`;
+    card.innerHTML=`<div class="match-head"><strong>Cible ${n} · ${escapeHtml(names[0])} / ${escapeHtml(names[1])}</strong><span class="tag">${inProgress?'EN COURS':d.finished?'TERMINÉ':'LIBRE'}</span></div><div>${escapeHtml(status)}</div><div class="muted">${d.legs?`Manches : ${d.legs[0]||0} – ${d.legs[1]||0}`:''}${row?.updated_at?' · Mis à jour : '+new Date(row.updated_at).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):''}</div>`;
     el.appendChild(card);
   }
   renderBoardFilters();
-  el.querySelectorAll('[data-open-board]').forEach(btn=>btn.addEventListener('click',()=>{
-    activeBoard=btn.dataset.openBoard; try{sessionStorage.setItem('dartsActiveBoard',activeBoard)}catch(e){}
-    showApp(); showPage('setupPage'); const row=remoteBoards[String(activeBoard)];
-    if(row?.match_state?.names) applyCloudSnapshot(row.match_state); else {settingsFromForm();render();} renderSaved();
-  }));
+}
+function renderBoardPicker(){
+  const el=$('boardPickerGrid'); if(!el)return; el.innerHTML='';
+  for(let n=1;n<=8;n++){
+    const row=remoteBoards[String(n)],d=row?.match_state||{},inProgress=!!d.matchStarted&&!d.finished;
+    const status=!d.matchStarted?'Libre':d.finished?'Terminé':`En cours · ${d.scores?.[0]??'—'} – ${d.scores?.[1]??'—'}`;
+    const names=Array.isArray(d.names)?d.names:['Joueur 1','Joueur 2'];
+    const btn=document.createElement('button');btn.type='button';btn.innerHTML=`<strong>Cible ${n}${String(n)===String(activeBoard)?' · Sélectionnée':''}</strong><span>${escapeHtml(status)}</span><span>${escapeHtml(names[0])} / ${escapeHtml(names[1])}</span>`;
+    if(inProgress)btn.style.borderColor='var(--accent)';
+    btn.addEventListener('click',()=>openBoard(n));el.appendChild(btn);
+  }
 }
 async function saveBoardState() {
   if(!supabase||!activeBoard||applyingRemote||!cloudReady||!isOrganizer)return;
@@ -343,7 +348,7 @@ function queueCloudSave(){if(applyingRemote||!activeBoard||!cloudReady||!isOrgan
 function startRealtime(){
   if(!supabase)return; if(channel)supabase.removeChannel(channel);
   channel=supabase.channel('dart-boards-live').on('postgres_changes',{event:'*',schema:'public',table:'dart_boards'},payload=>{
-    const row=payload.new;if(!row?.board_number)return; remoteBoards[String(row.board_number)]=row;renderLiveBoards();
+    const row=payload.new;if(!row?.board_number)return; remoteBoards[String(row.board_number)]=row;renderLiveBoards();renderBoardPicker();
     if(String(row.board_number)===String(activeBoard)&&row.match_state?.names&&!applyingRemote)applyCloudSnapshot(row.match_state);
   }).subscribe(status=>{if(status==='SUBSCRIBED')cloudMessage('Connecté à Supabase · mises à jour en direct',true);});
 }
@@ -576,12 +581,27 @@ function renderHistory(){
  });
 }
 function getSaved(){try{return JSON.parse(localStorage.getItem(savedStorageKey())||'[]')}catch{return []}}
+let selectedHistoryMatch = null;
 function renderSaved(){
  state.saved=getSaved();const el=$('savedMatches');el.innerHTML='';
- if(!state.saved.length){el.innerHTML='<div class="muted">Aucun résultat enregistré.</div>';return}
- state.saved.slice().reverse().forEach((m,idx)=>{
-  const div=document.createElement('div');div.className='match-card';
-  div.innerHTML=`<div class="match-head"><strong>${escapeHtml(m.names[0])} ${m.legs[0]}–${m.legs[1]} ${escapeHtml(m.names[1])}</strong><span class="tag">${escapeHtml(m.winner||(m.finished?'Terminé':'En cours'))}</span></div><div class="muted">${escapeHtml(m.date)} · départ ${m.start} · ${m.doubleIn?'Double In':'Simple In'} · ${m.doubleOut?'Double Out':'Sortie libre'}</div>`;
+ if(!state.saved.length){el.innerHTML='<div class="muted">Aucun match enregistré.</div>';renderSelectedMatchHistory(null);return}
+ state.saved.slice().reverse().forEach((m,reverseIndex)=>{
+  const idx=state.saved.length-1-reverseIndex;
+  const div=document.createElement('button');div.type='button';div.className='match-card';div.style.textAlign='left';div.style.width='100%';
+  div.innerHTML=`<div class="match-head"><strong>${escapeHtml(m.names?.[0]||'Joueur 1')} ${m.legs?.[0]??0}–${m.legs?.[1]??0} ${escapeHtml(m.names?.[1]||'Joueur 2')}</strong><span class="tag">${escapeHtml(m.winner||(m.finished?'Terminé':'En cours'))}</span></div><div class="muted">${escapeHtml(m.date||'Date inconnue')} · départ ${m.start||501} · ${m.doubleIn?'Double In':'Simple In'} · ${m.doubleOut?'Double Out':'Sortie libre'}</div><div class="help" style="margin-top:6px">Cliquer pour voir les volées</div>`;
+  div.addEventListener('click',()=>{selectedHistoryMatch=idx;renderSelectedMatchHistory(m);});
+  el.appendChild(div);
+ });
+ if(selectedHistoryMatch!==null && state.saved[selectedHistoryMatch]) renderSelectedMatchHistory(state.saved[selectedHistoryMatch]);
+}
+function renderSelectedMatchHistory(match){
+ const el=$('history');if(!el)return;el.innerHTML='';
+ if(!match){el.innerHTML='<div class="muted">Sélectionne un match ci-dessus pour afficher ses volées.</div>';return;}
+ const turns=Array.isArray(match.history)?match.history:[];
+ if(!turns.length){el.innerHTML='<div class="muted">Aucune volée enregistrée pour ce match.</div>';return;}
+ turns.forEach(t=>{
+  const div=document.createElement('div');div.className='history-row';
+  div.innerHTML=`<strong>${escapeHtml(t.player||'Joueur')}</strong> · ${(Array.isArray(t.darts)?t.darts:[]).map(escapeHtml).join(', ')}<div class="muted">${escapeHtml(t.status||'')} · ${t.before??'—'} → ${t.after??'—'} · volée : ${t.total??0} · manche ${t.leg??'—'}</div>`;
   el.appendChild(div);
  });
 }
@@ -591,7 +611,8 @@ function saveMatch(){
  const saved=getSaved();saved.push(record);try{localStorage.setItem(savedStorageKey(),JSON.stringify(saved));$('toast').textContent='Résultat enregistré puis synchronisé dès que possible.';}catch(e){$('toast').textContent='Le navigateur bloque le stockage local : le résultat ne peut pas être conservé.';}renderSaved();
 }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function showPage(pageId){document.querySelectorAll('nav [data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===pageId));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===pageId));}
+function updateBoardNav(){document.querySelectorAll('nav .board-only').forEach(b=>b.classList.toggle('hidden',!activeBoard));}
+function showPage(pageId){if(['setupPage','gamePage','resultsPage'].includes(pageId)&&!activeBoard)pageId='overviewPage';document.querySelectorAll('nav [data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===pageId));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===pageId));}
 document.querySelectorAll('nav [data-page]').forEach(btn=>btn.addEventListener('click',()=>showPage(btn.dataset.page)));
 $('format').addEventListener('change',()=>{
  $('customLegsLabel').classList.toggle('hidden',$('format').value!=='custom');
@@ -603,12 +624,18 @@ $('singleBull').addEventListener('click',()=>recordBull(25,false));
 $('bullseye').addEventListener('click',()=>recordBull(50,true));
 $('endTurn').addEventListener('click',evaluateTurn);
 $('finishMatch').addEventListener('click',()=>{
+ if(!isOrganizer){$('toast').textContent='Connexion organisateur requise.';return;}
  if(!state.matchStarted){$('toast').textContent='Aucun match à terminer.';return;}
  if(state.finished){$('toast').textContent='Le match est déjà terminé.';return;}
- if(confirm('Terminer ce match maintenant ? Il apparaîtra comme terminé dans la vue des planches.')){
+ if(confirm('Terminer ce match et libérer la cible ? Le résultat sera conservé dans la liste des résultats.')){
   state.finished=true;
   state.winner=state.legs[0]===state.legs[1]?null:(state.legs[0]>state.legs[1]?state.names[0]:state.names[1]);
-  $('toast').textContent='Match terminé manuellement.';
+  const record={names:[...state.names],legs:[...state.legs],winner:state.winner||null,finished:true,start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,date:new Date().toLocaleString('fr-BE'),history:[...state.history]};
+  const saved=getSaved();saved.push(record);
+  try{localStorage.setItem(savedStorageKey(),JSON.stringify(saved));}catch(e){}
+  state.matchStarted=false;state.finished=false;state.winner=null;
+  state.scores=[state.start,state.start];state.active=0;state.darts=[];state.opened=[!state.doubleIn,!state.doubleIn];state.pendingLegWin=null;state.turnSnapshot=null;
+  $('toast').textContent='Résultat enregistré. Cible libérée, prête pour un nouveau match.';
   render();
  }
 });
@@ -621,7 +648,7 @@ $('export').addEventListener('click',()=>{
  const csv=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='resultats_flechettes.csv';a.click();URL.revokeObjectURL(url);
 });
-drawTarget();freshLeg();render();renderBoardFilters();renderLiveBoards();setOrganizerUI();
+drawTarget();freshLeg();render();renderBoardFilters();renderLiveBoards();renderBoardPicker();setOrganizerUI();
 })();
 </script>
 </body>
