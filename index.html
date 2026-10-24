@@ -73,6 +73,14 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 #loginError{min-height:20px;color:#ff9b9b;font-size:13px;margin-top:8px}
 .board-pill{display:inline-flex;align-items:center;gap:8px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:12px;margin-top:10px}
 
+
+.bull-modal-backdrop{position:fixed;inset:0;background:#000b;z-index:9999;display:grid;place-items:center;padding:18px}
+.bull-modal{width:min(100%,480px);background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:0 18px 60px #0009}
+.bull-modal h2{margin:0 0 8px}.bull-modal p{color:var(--muted);margin:0 0 16px}
+.bull-modal .bull-choice-buttons{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.bull-modal .bull-choice-buttons button{min-height:64px;font-size:17px}
+.bull-modal .bull-cancel{margin-top:10px;width:100%;background:transparent}
+
 </style>
 </head>
 <body>
@@ -196,6 +204,17 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 </section>
 </div>
 </main>
+</div>
+<div id="bullChoiceModal" class="bull-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="bullChoiceTitle">
+  <div class="bull-modal">
+    <h2 id="bullChoiceTitle">Qui commence ?</h2>
+    <p>Choisis le joueur qui a remporté le bull-off et qui lancera la première manche.</p>
+    <div class="bull-choice-buttons">
+      <button type="button" id="bullPlayer1" class="primary">Joueur 1</button>
+      <button type="button" id="bullPlayer2" class="primary">Joueur 2</button>
+    </div>
+    <button type="button" id="bullCancel" class="bull-cancel">Annuler</button>
+  </div>
 </div>
 <script>
 /* Secours visuel : l’interface reste affichée même si le CDN Supabase est indisponible. */
@@ -436,13 +455,22 @@ function freshLeg(starter=0){
  state.legStarter=starter===1?1:0;state.scores=[state.start,state.start];state.active=state.legStarter;state.darts=[];
  state.opened=[!state.doubleIn,!state.doubleIn];state.finished=false;state.winner=null;state.turnSnapshot=null;state.pendingLegWin=null;
 }
-async function startMatch(){
+function openBullChoice(){
  if(!isOrganizer){$('toast').textContent='Connexion organisateur requise pour modifier les scores.';return;}
- const choice=prompt('Qui a remporté le bull et commence la première manche ?\nTape 1 pour '+($('p1').value.trim()||'Joueur 1')+' ou 2 pour '+($('p2').value.trim()||'Joueur 2')+'.','1');
- if(choice===null)return;
- const answer=choice.trim();
- if(answer!=='1'&&answer!=='2'){alert('Choisis 1 ou 2 pour désigner le joueur qui commence.');return;}
- const starter=Number(answer)-1;
+ const name1=$('p1').value.trim()||'Joueur 1';
+ const name2=$('p2').value.trim()||'Joueur 2';
+ $('bullPlayer1').textContent=name1;
+ $('bullPlayer2').textContent=name2;
+ $('bullChoiceModal').classList.remove('hidden');
+}
+function closeBullChoice(){ $('bullChoiceModal').classList.add('hidden'); }
+$('bullPlayer1').addEventListener('click',()=>{closeBullChoice();startMatch(0);});
+$('bullPlayer2').addEventListener('click',()=>{closeBullChoice();startMatch(1);});
+$('bullCancel').addEventListener('click',closeBullChoice);
+$('bullChoiceModal').addEventListener('click',event=>{if(event.target===$('bullChoiceModal'))closeBullChoice();});
+async function startMatch(starter){
+ if(!isOrganizer){$('toast').textContent='Connexion organisateur requise pour modifier les scores.';return;}
+ if(starter!==0&&starter!==1)return;
  // Lire les champs saisis au tout dernier moment, avant toute synchronisation.
  settingsFromForm();
  state.customLegs=Number($('customLegs').value)||11;
@@ -768,7 +796,7 @@ $('format').addEventListener('change',()=>{
  $('customLegsLabel').classList.toggle('hidden',$('format').value!=='custom');
 });
 ['p1','p2','start','doubleIn','doubleOut','format','customLegs'].forEach(id=>$(id).addEventListener('input',()=>{setupFormDirty=true;}));
-$('newMatch').addEventListener('click',startMatch);
+$('newMatch').addEventListener('click',openBullChoice);
 $('saveMatch').addEventListener('click',saveMatch);
 $('miss').addEventListener('click',()=>addDart({label:'Raté',score:0,double:false,mult:'S',n:0}));
 $('singleBull').addEventListener('click',()=>recordBull(25,false));
