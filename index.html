@@ -117,8 +117,8 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
   <span id="authStatus" class="muted">Mode consultation</span>
 </div>
 <nav aria-label="Menu principal">
-<button class="active" data-page="overviewPage">Vue des cibles</button><button class="organizer-only hidden" data-page="playersPage">Joueurs</button><button class="organizer-only hidden" data-page="boardSelectPage">Choisir une cible</button><button class="board-only hidden" data-page="setupPage">Préparation</button>
-<button class="board-only hidden" data-page="gamePage">Cible & score</button>
+<button class="active" data-page="overviewPage">Vue des cibles</button><button class="organizer-only hidden" data-page="playersPage">Joueurs</button><button class="organizer-only hidden" data-page="boardSelectPage">Choisir une cible</button><button class="board-only hidden" data-page="setupPage" aria-hidden="true" tabindex="-1">Préparation</button>
+<button class="board-only hidden" data-page="gamePage" aria-hidden="true" tabindex="-1">Cible & score</button>
 <button data-page="resultsPage">Résultats</button>
 </nav>
 <div class="board-pill" id="boardPill" style="display:none">Cible active : <strong id="activeBoardLabel">—</strong></div>
@@ -140,7 +140,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 </section>
 </div>
 <div id="boardSelectPage" class="page">
-<section class="panel"><h2>Choisir une cible</h2><p class="help">Sélectionne une cible pour accéder à sa préparation, au score et aux résultats.</p><div id="boardPickerGrid" class="board-picker-grid"><div class="muted">Chargement des cibles…</div></div></section>
+<section class="panel"><h2>Choisir une cible</h2><p class="help">Choisis une cible : si elle est libre, tu accèdes à la préparation ; si un match est en cours, tu reprends directement le score.</p><div id="boardPickerGrid" class="board-picker-grid"><div class="muted">Chargement des cibles…</div></div></section>
 </div>
 <div id="setupPage" class="page">
 <div class="setup-layout">
@@ -824,7 +824,10 @@ async function releaseBoardAndReturnToSetup(message){
   $('toast').textContent=message;
   render();
   if(supabase&&cloudReady&&isOrganizer&&activeBoard) await saveBoardState();
-  showPage('setupPage');
+  activeBoard=null;
+  try{sessionStorage.removeItem('dartsActiveBoard')}catch(e){}
+  updateBoardNav();
+  showPage('boardSelectPage');
   window.scrollTo(0,0);
 }
 function announceFinishedMatch(){
@@ -983,11 +986,9 @@ function saveMatch(){
 }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function updateBoardNav(){
- document.querySelectorAll('nav .board-only').forEach(b=>b.classList.toggle('hidden',!isOrganizer||!activeBoard));
+ // Préparation et Cible & score sont des écrans de parcours, pas des onglets.
+ document.querySelectorAll('nav .board-only').forEach(b=>b.classList.add('hidden'));
  document.querySelectorAll('nav .organizer-only').forEach(b=>b.classList.toggle('hidden',!isOrganizer));
- // La préparation n'est plus accessible pendant un match actif ; elle revient une fois le match terminé.
- const setupTab=document.querySelector('nav [data-page="setupPage"]');
- if(setupTab)setupTab.classList.toggle('hidden',!isOrganizer||!activeBoard||(state.matchStarted&&!state.finished));
  const pill=$('boardPill'); if(pill)pill.style.display=isOrganizer&&activeBoard?'block':'none';
 }
 function showPage(pageId){
