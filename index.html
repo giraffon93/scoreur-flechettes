@@ -689,7 +689,7 @@ function drawTarget(){
  const svg=$('target');svg.innerHTML='';
  const ns='http://www.w3.org/2000/svg';
  const bg=document.createElementNS(ns,'circle');bg.setAttribute('cx',250);bg.setAttribute('cy',250);bg.setAttribute('r',238);bg.setAttribute('fill','#090a0c');bg.setAttribute('stroke','#aeb4bd');bg.setAttribute('stroke-width','3');svg.appendChild(bg);
- const cx=250,cy=250;const radii={outer:222,doubleOuter:205,tripleInner:124,tripleOuter:139,innerBull:17,outerBull:32};
+ const cx=250,cy=250;const radii={outer:222,doubleOuter:197,tripleInner:116,tripleOuter:138,innerBull:17,outerBull:32};
  for(let i=0;i<20;i++){
    const a0=(-90+i*18-9)*Math.PI/180, a1=(-90+i*18+9)*Math.PI/180;
    const n=order[i], redGreen=i%2===0;
