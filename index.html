@@ -293,9 +293,32 @@ function renderPlayerSelectors(keepCurrent=false){
   }
   updatePlayerSelectOptions();
 }
+function getPlayersBusyOnOtherBoards(){
+ const busy=new Map();
+ for(let n=1;n<=8;n++){
+  if(String(n)===String(activeBoard))continue;
+  const data=remoteBoards[String(n)]?.match_state;
+  // Un joueur est indisponible seulement tant qu'un match sur une autre cible est en cours.
+  if(!data?.matchStarted||data?.finished||!Array.isArray(data.names))continue;
+  for(const rawName of data.names){
+   const name=String(rawName||'').trim();
+   if(name)busy.set(name.toLocaleLowerCase('fr'),{name,board:n});
+  }
+ }
+ return busy;
+}
 function updatePlayerSelectOptions(){
  const a=$('p1')?.value||'',b=$('p2')?.value||'';
- for(const [id,other] of [['p1',b],['p2',a]]){const sel=$(id);if(!sel)continue;[...sel.options].forEach(opt=>{if(opt.value)opt.disabled=opt.value===other;});}
+ const busy=getPlayersBusyOnOtherBoards();
+ for(const [id,other] of [['p1',b],['p2',a]]){
+  const sel=$(id);if(!sel)continue;
+  [...sel.options].forEach(opt=>{
+   if(!opt.value){opt.disabled=false;return;}
+   const occupied=busy.get(opt.value.toLocaleLowerCase('fr'));
+   opt.disabled=opt.value===other||!!occupied;
+   opt.title=occupied?'Déjà en match sur la cible '+occupied.board:(opt.value===other?'Déjà sélectionné pour l’autre joueur':'');
+  });
+ }
 }
 function renderPlayersList(){
  const el=$('playersList');if(!el)return;el.innerHTML='';
@@ -496,7 +519,7 @@ function queueCloudSave(){if(applyingRemote||!activeBoard||!cloudReady||!isOrgan
 function startRealtime(){
   if(!supabase)return; if(channel)supabase.removeChannel(channel);
   channel=supabase.channel('dart-boards-live').on('postgres_changes',{event:'*',schema:'public',table:'dart_boards'},payload=>{
-    const row=payload.new;if(!row?.board_number)return; remoteBoards[String(row.board_number)]=row;if(String(row.board_number)==='1'&&Array.isArray(row.match_state?.players)){playerRoster=[...new Set(row.match_state.players.map(x=>String(x).trim()).filter(Boolean))];try{localStorage.setItem(PLAYER_ROSTER_KEY,JSON.stringify(playerRoster));}catch(e){}renderPlayerSelectors(true);renderPlayersList();}renderLiveBoards();renderBoardPicker();renderSaved();
+    const row=payload.new;if(!row?.board_number)return; remoteBoards[String(row.board_number)]=row;if(String(row.board_number)==='1'&&Array.isArray(row.match_state?.players)){playerRoster=[...new Set(row.match_state.players.map(x=>String(x).trim()).filter(Boolean))];try{localStorage.setItem(PLAYER_ROSTER_KEY,JSON.stringify(playerRoster));}catch(e){}renderPlayerSelectors(true);renderPlayersList();}updatePlayerSelectOptions();renderLiveBoards();renderBoardPicker();renderSaved();
     if(String(row.board_number)===String(activeBoard)&&row.match_state?.names&&!applyingRemote)applyCloudSnapshot(row.match_state,row.updated_at);
   }).subscribe(status=>{if(status==='SUBSCRIBED')cloudMessage('Connecté à Supabase · mises à jour en direct',true);});
 }
@@ -538,6 +561,16 @@ function openBullChoice(){
  const name2=$('p2').value.trim();
  if(!name1||!name2){$('matchStatus').textContent='Choisis deux joueurs dans la liste avant de démarrer.';return;}
  if(name1===name2){$('matchStatus').textContent='Choisis deux joueurs différents.';return;}
+ const busy=getPlayersBusyOnOtherBoards();
+ const busy1=busy.get(name1.toLocaleLowerCase('fr'));
+ const busy2=busy.get(name2.toLocaleLowerCase('fr'));
+ if(busy1||busy2){
+  const details=[];
+  if(busy1)details.push(name1+' joue déjà sur la cible '+busy1.board);
+  if(busy2)details.push(name2+' joue déjà sur la cible '+busy2.board);
+  $('matchStatus').textContent=details.join(' · ')+'. Termine ce match avant de les sélectionner ici.';
+  updatePlayerSelectOptions();return;
+ }
  $('bullPlayer1').textContent=name1;
  $('bullPlayer2').textContent=name2;
  $('bullChoiceModal').classList.remove('hidden');
