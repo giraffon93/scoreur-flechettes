@@ -490,26 +490,28 @@ async function openBoard(n){
   localMatchStartLockUntil = 0;
   if(!boardNames[selected] || !isOrganizer) return;
 
-  // Le code est demandé uniquement lorsqu'un match est en cours sur un autre appareil.
-  const existing=remoteBoards[selected]?.match_state||{};
+  // Rafraîchir le statut pour décider à partir de l'état réel de Supabase.
+  if(!supabase || !cloudReady){alert('Connexion Supabase pas encore prête. Réessaie dans quelques secondes.');return;}
+  const {data:latestRow,error:readError}=await supabase.from('dart_boards').select('board_number,match_state,updated_at').eq('board_number',Number(n)).maybeSingle();
+  if(readError){alert('Impossible de lire le statut de la cible : '+readError.message);return;}
+  if(latestRow) remoteBoards[selected]=latestRow;
+  const existing=latestRow?.match_state||{};
   const inProgress=!!existing.matchStarted&&!existing.finished;
-  if(inProgress && supabase){
+
+  // Une cible libre s'ouvre sans code. Le code n'est demandé que pour reprendre
+  // un match déjà en cours depuis un autre appareil.
+  if(inProgress){
     const {data:hosts,error:hostError}=await supabase.rpc('get_dart_board_host_status',{p_device_id:dartDeviceId});
-    if(hostError){
-      alert('Impossible de vérifier le verrouillage de cette cible : '+hostError.message);
-      return;
-    }
+    if(hostError){alert('Impossible de vérifier le verrouillage de cette cible : '+hostError.message);return;}
     const host=(hosts||[]).find(x=>Number(x.board_number)===Number(n));
     if(!host || !host.is_mine){
-      const code=prompt('Un match est en cours sur la cible '+n+'. Entre le code de cette cible pour y accéder :');
+      const code=prompt('Un match est en cours sur la cible '+n+'. Entre le code de cette cible pour reprendre le match :');
       if(code===null)return;
+      if(!code.trim()){alert('Code obligatoire pour reprendre un match en cours.');return;}
       const {error:authError}=await supabase.rpc('authorize_dart_board',{
         p_board_number:Number(n),p_device_id:dartDeviceId,p_code:code.trim()
       });
-      if(authError){
-        alert('Accès refusé : '+(authError.message||'code incorrect'));
-        return;
-      }
+      if(authError){alert('Accès refusé : '+(authError.message||'code incorrect'));return;}
     }
   }
 
@@ -520,17 +522,18 @@ async function openBoard(n){
   updateBoardNav();
   showApp();
   const row=remoteBoards[String(activeBoard)];
-  if(row?.match_state?.names){applyCloudSnapshot(row.match_state,row.updated_at);}
+  if(row?.match_state?.names) applyCloudSnapshot(row.match_state,row.updated_at);
   else {
     state.names=['Joueur 1','Joueur 2']; state.start=501; state.doubleIn=false; state.doubleOut=true; state.format='3';
     state.scores=[501,501]; state.active=0; state.darts=[]; state.opened=[true,true]; state.legs=[0,0]; state.history=[];
-    state.finished=false; state.winner=null; state.legNo=1; state.matchStarted=false; state.pendingLegWin=null; state.turnSnapshot=null; state.legStarter=0; state.legStarter=0;
+    state.finished=false; state.winner=null; state.legNo=1; state.matchStarted=false; state.pendingLegWin=null; state.turnSnapshot=null; state.legStarter=0;
     $('p1').value='Joueur 1'; $('p2').value='Joueur 2'; $('start').value='501'; $('doubleIn').value='no'; $('doubleOut').value='yes'; $('format').value='3';
     render();
   }
   if(!state.matchStarted || state.finished){$('p1').value='';$('p2').value='';setupFormDirty=false;updatePlayerSelectOptions();}
   renderSaved();
-  showPage('setupPage');
+  // Si un match est en cours, aller directement au score sans réinitialiser quoi que ce soit.
+  showPage(inProgress ? 'gamePage' : 'setupPage');
   window.scrollTo(0,0);
 }
 
@@ -644,10 +647,6 @@ async function startMatch(starter){
    $('toast').textContent='Impossible de démarrer : la connexion Supabase ou la cible active n’est pas prête.';
    return;
  }
- // Le RPC SQL exige aussi le code de la cible au démarrage du match.
- const targetCode=prompt('Entre le code de la cible '+activeBoard+' pour démarrer le match :');
- if(targetCode===null)return;
- if(!targetCode.trim()){$('toast').textContent='Démarrage annulé : le code de la cible est obligatoire.';return;}
  // Lire les champs saisis au tout dernier moment, avant toute synchronisation.
  settingsFromForm();
  state.customLegs=Number($('customLegs').value)||11;
@@ -661,12 +660,11 @@ async function startMatch(starter){
    const {data,error}=await supabase.rpc('start_dart_match',{
      p_board_number:Number(activeBoard),
      p_device_id:dartDeviceId,
-     p_password:targetCode.trim(),
      p_match_state:snapshot
    });
    if(error){
      state.matchStarted=false;
-     $('toast').textContent='Impossible de démarrer le match : '+error.message;
+     $('toast').textContent='Impossible de démarrer le match : '+error.message+' (vérifie que le SQL de démarrage sans code a été appliqué dans Supabase).';
      render();return;
    }
    // Le RPC renvoie les informations de réservation, pas le match_state : mettre à jour la carte localement.
