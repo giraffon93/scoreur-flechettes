@@ -88,6 +88,39 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 .bull-modal .bull-choice-buttons button{min-height:64px;font-size:17px}
 .bull-modal .bull-cancel{margin-top:10px;width:100%;background:transparent}
 
+
+/* Tableau de tournoi à élimination directe */
+#tournamentPage .panel{overflow:hidden}
+#tournamentWorkspace{margin-top:18px}
+.tournament-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:14px 0}
+.tournament-toolbar button{width:auto}
+.bracket-scroll{overflow-x:auto;padding:10px 4px 18px;scrollbar-width:thin}
+.bracket{display:flex;align-items:stretch;gap:24px;min-width:max-content;position:relative}.bracket-connectors{position:absolute;left:0;top:0;pointer-events:none;overflow:visible;z-index:0}.bracket-round{position:relative;z-index:1}
+.bracket-round{width:220px;flex:0 0 220px;display:flex;flex-direction:column;min-height:180px}
+.bracket-round-title{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:800;padding:0 2px 8px;border-bottom:1px solid var(--line);margin-bottom:9px}
+.bracket-round-matches{--match-height:142px;position:relative;display:block;flex:0 0 auto;min-height:142px}
+/* Les positions sont recalculées selon les matchs réellement présents, pas avec des espacements fixes. */
+.bracket-match{min-height:142px;box-sizing:border-box}
+.bracket-match{position:relative;background:#141820;border:1px solid #3a4350;border-radius:8px;padding:7px;box-shadow:0 2px 8px #0002}
+.bracket-match:after{content:"";position:absolute;right:-20px;top:50%;width:19px;border-top:1px solid #596373}
+.bracket-round:last-child .bracket-match:after{display:none}
+.bracket-match-top{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px;font-size:11px;color:var(--muted)}
+.bracket-match-top button{width:auto;padding:2px 5px;font-size:10px}
+.bracket-player{display:flex;align-items:center;gap:8px;min-height:36px;border:1px solid #303946;border-radius:7px;padding:6px 8px;margin-top:5px;background:#1b222c}
+.bracket-player.winner{border-color:#3d9b69;background:#163124;color:#d8ffe7}
+.bracket-player .player-name{flex:1;min-width:0;overflow-wrap:anywhere;font-size:13px}
+.bracket-player .winner-mark{font-size:11px;color:#79e3a4;font-weight:800}
+.bracket-match select{font-size:11px;padding:4px 5px;min-width:0}
+.bracket-match .winner-select{margin-top:4px}
+.bracket-match .match-actions{display:flex;gap:6px;margin-top:8px}
+.bracket-match .match-actions button{font-size:11px;padding:6px 7px;width:auto;flex:1}
+.bracket-add{margin-top:14px;width:100%;font-size:12px;padding:9px}
+.bracket-next{margin-top:10px;width:100%;font-size:12px;padding:10px;background:#29313d;border-color:#8b7541}
+.bracket-final{border-color:#a88a38;background:linear-gradient(145deg,#2b2618,#171a20)}
+.bracket-empty{font-size:12px;color:var(--muted);padding:12px;border:1px dashed #46505f;border-radius:8px}
+.public-tournament-rounds{display:flex;gap:18px;overflow-x:auto;padding:10px 2px 16px;align-items:stretch}.public-tournament-round{width:220px;flex:0 0 220px}.public-tournament-match{border:1px solid var(--line);background:#141820;border-radius:9px;padding:10px;margin:0 0 12px}.public-tournament-match .public-player{padding:7px 8px;border:1px solid #303946;background:#1b222c;border-radius:7px;margin-top:5px;overflow-wrap:anywhere}.public-tournament-match .public-player.winner{border-color:#3d9b69;background:#163124;color:#d8ffe7}.public-tournament-match .public-status{font-size:11px;color:var(--muted);margin-top:8px}
+@media(max-width:600px){.bracket{gap:18px}.bracket-round{width:205px;flex-basis:205px}}
+
 </style>
 </head>
 <body>
@@ -121,7 +154,8 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 <nav aria-label="Menu principal">
 <button class="active" data-page="overviewPage">Vue des cibles</button><button class="organizer-only hidden" data-page="playersPage">Joueurs</button><button class="organizer-only hidden" data-page="boardSelectPage">Choisir une cible</button><button class="board-only hidden" data-page="setupPage">Préparation</button>
 <button class="board-only hidden" data-page="gamePage">Cible & score</button>
-<button data-page="resultsPage">Résultats</button>
+<button class="organizer-only hidden" data-page="tournamentPage">Tournoi (TEST)</button>
+<button data-page="resultsPage">Résultats</button><button data-page="publicTournamentPage">Tournoi</button>
 </nav>
 <div class="board-pill" id="boardPill" style="display:none">Cible active : <strong id="activeBoardLabel">—</strong></div>
 </header>
@@ -212,6 +246,24 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
   <div id="toast" role="status"></div>
 </section>
 </div>
+</div>
+<div id="tournamentPage" class="page">
+<section class="panel">
+  <h2>Mode tournoi — version de test</h2>
+  <p class="status">Le tournoi est préparé par l’organisateur. Chaque modification est synchronisée automatiquement en ligne pour que les visiteurs voient son évolution en temps réel. Le scoreur 501 et ses tables restent séparés.</p>
+  <label>Nom du tournoi<input id="tournamentName" maxlength="80" placeholder="Ex. Tournoi du club"></label>
+  <div class="actions"><button id="tournamentCreate" class="primary" type="button">Créer / enregistrer le tournoi</button><button id="tournamentReset" class="danger" type="button">Réinitialiser le tournoi test</button></div>
+  <div id="tournamentWorkspace" class="hidden">
+    <h3 id="tournamentCurrentTitle">Matchs du tournoi</h3>
+    <p class="help">Ajoute les matchs un par un, puis choisis les deux joueurs dans chaque match. Un joueur ne peut être sélectionné que dans un seul match du même tour. Les cibles restent libres.</p>
+    <div class="actions"><button id="tournamentAddMatch" type="button" class="primary">+ Ajouter le premier match</button><button id="tournamentLoadTestPlayers" type="button">Charger 60 joueurs de test</button></div><p class="help">Les 60 noms de test sont isolés de la liste normale des joueurs et de Supabase.</p>
+    <div id="tournamentRounds" class="list" style="margin-top:12px"></div>
+  </div>
+  <div id="tournamentMessage" class="status" role="status">Saisis le nom du tournoi puis clique sur « Créer / enregistrer le tournoi ».</div>
+</section>
+</div>
+<div id="publicTournamentPage" class="page">
+<section class="panel"><h2 id="publicTournamentTitle">Récapitulatif du tournoi</h2><p class="help">Vue publique en lecture seule. Les changements du tournoi apparaissent automatiquement au fil de son évolution.</p><div class="actions" style="margin-bottom:12px"><button id="publicTournamentRefresh" type="button">Actualiser</button></div><div id="publicTournamentStatus" class="status" role="status">Chargement du tournoi…</div><div id="publicTournamentSummary"></div><div id="publicTournamentRounds" class="public-tournament-rounds"></div><div id="publicTournamentPodium" class="list"></div></section>
 </div>
 <div id="resultsPage" class="page">
 <section class="panel">  <h2>Matchs enregistrés</h2>
@@ -592,7 +644,7 @@ if(supabase){
   loadBoardStates().then(()=>startRealtime());
   setInterval(loadBoardStates,15000);
   supabase.auth.getSession().then(({data})=>{isOrganizer=!!data?.session;setOrganizerUI();});
-  supabase.auth.onAuthStateChange((_event,session)=>{isOrganizer=!!session;setOrganizerUI();cloudMessage(isOrganizer?'Organisateur connecté · modification autorisée':'Lecture publique active · connexion requise pour modifier',true);if(isOrganizer&&activeBoard&&cloudReady)loadBoardStates();});
+  supabase.auth.onAuthStateChange((_event,session)=>{isOrganizer=!!session;setOrganizerUI();cloudMessage(isOrganizer?'Organisateur connecté · modification autorisée':'Lecture publique active · connexion requise pour modifier',true);if(isOrganizer&&activeBoard&&cloudReady)loadBoardStates();if(isOrganizer&&tournamentTest?.name?.trim())schedulePublicTournamentSync();});
 }else cloudMessage('Impossible de charger Supabase.');
 $('loginButton').addEventListener('click',async()=>{
   if(!supabase){$('authStatus').textContent='Supabase ne se charge pas.';return;}
@@ -1081,7 +1133,7 @@ function updateBoardNav(){
  const pill=$('boardPill'); if(pill)pill.style.display=isOrganizer&&activeBoard?'block':'none';
 }
 function showPage(pageId){
- if(!isOrganizer && !['overviewPage','resultsPage'].includes(pageId))pageId='overviewPage';
+ if(!isOrganizer && !['overviewPage','resultsPage','publicTournamentPage'].includes(pageId))pageId='overviewPage'; if(pageId==='publicTournamentPage')loadPublicTournament();
  if(isOrganizer && ['setupPage','gamePage'].includes(pageId)&&!activeBoard)pageId='overviewPage';document.querySelectorAll('nav [data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===pageId));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===pageId));}
 document.querySelectorAll('nav [data-page]').forEach(btn=>btn.addEventListener('click',()=>showPage(btn.dataset.page)));
 $('format').addEventListener('change',()=>{
@@ -1165,6 +1217,200 @@ $('export').addEventListener('click',()=>{
  const csv=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='resultats_flechettes.csv';a.click();URL.revokeObjectURL(url);
 });
+// Mode tournoi de test : stockage local uniquement, isolé des tables et RPC Supabase.
+const TOURNAMENT_TEST_KEY='dartsTournamentPrototype_v1';
+let tournamentTest={name:'',rounds:[],testPlayers:[]};
+try{const raw=JSON.parse(localStorage.getItem(TOURNAMENT_TEST_KEY)||'null');if(raw&&typeof raw==='object')tournamentTest={name:String(raw.name||''),rounds:Array.isArray(raw.rounds)?raw.rounds:[],testPlayers:Array.isArray(raw.testPlayers)?raw.testPlayers:[]};}catch(e){}
+const PUBLIC_TOURNAMENT_ROW='main';
+function publicTournamentSnapshot(){return {name:tournamentTest.name,rounds:(tournamentTest.rounds||[]).map((r,ri)=>({title:publicRoundTitle(r,ri,tournamentTest.rounds.length),matches:(r.matches||[]).map((m,mi)=>({number:mi+1,p1:m.p1||'',p2:m.p2||'',winner:m.winner||'',bye:!!m.autoByeAdvance}))})),publishedAt:new Date().toISOString()};}
+function publicRoundTitle(round,ri,total){const n=(round.matches||[]).length;if(n===16)return 'Seizièmes de finale';if(n===8)return 'Huitièmes de finale';if(n===4)return 'Quarts de finale';if(n===2)return 'Demi-finales';if(n===1&&ri===total-1)return 'Finale';return 'Tour '+(ri+1)+' · '+n+' match'+(n>1?'s':'');}
+let publicTournamentSyncTimer=null;
+let publicTournamentSyncInFlight=false;
+let publicTournamentSyncQueued=false;
+function schedulePublicTournamentSync(){
+ clearTimeout(publicTournamentSyncTimer);
+ if(!isOrganizer||!supabase)return;
+ publicTournamentSyncTimer=setTimeout(()=>publishPublicTournament(true),450);
+}
+async function publishPublicTournament(silent=false){
+ if(!isOrganizer||!supabase){if(!silent)$('tournamentMessage').textContent='Connexion organisateur requise : le tournoi reste enregistré uniquement dans ce navigateur tant que tu n’es pas connecté.';return;}
+ if(publicTournamentSyncInFlight){publicTournamentSyncQueued=true;return;}
+ publicTournamentSyncInFlight=true;
+ const payload=publicTournamentSnapshot();
+ try{
+  const {error}=await supabase.from('dart_tournament_public').upsert({id:PUBLIC_TOURNAMENT_ROW,payload,updated_at:new Date().toISOString()});
+  if(error){$('tournamentMessage').textContent='ÉCHEC de synchronisation Supabase : '+error.message+'. Le récapitulatif public ne peut pas être mis à jour tant que la table/politique SQL n’est pas corrigée.';return;}
+  $('tournamentMessage').textContent=payload.name?'Tournoi synchronisé avec le récapitulatif public. Les visiteurs verront les changements automatiquement.':'Tournoi réinitialisé et récapitulatif public vidé.';
+  if($('publicTournamentPage')?.classList.contains('active'))renderPublicTournament(payload);
+ }catch(e){$('tournamentMessage').textContent='Erreur de synchronisation Supabase : '+(e?.message||e);}
+ finally{publicTournamentSyncInFlight=false;if(publicTournamentSyncQueued){publicTournamentSyncQueued=false;schedulePublicTournamentSync();}}
+}
+function publicEl(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e;}
+function renderPublicTournament(payload){
+ const title=$('publicTournamentTitle'),status=$('publicTournamentStatus'),summary=$('publicTournamentSummary'),roundsEl=$('publicTournamentRounds'),podium=$('publicTournamentPodium');
+ title.textContent=payload?.name||'Récapitulatif du tournoi';summary.innerHTML='';roundsEl.innerHTML='';podium.innerHTML='';
+ if(!payload||!payload.name){status.textContent='Aucun tournoi n’a encore été publié.';return;}
+ const all=(payload.rounds||[]).flatMap(r=>r.matches||[]),done=all.filter(m=>m.winner).length;
+ status.textContent=`${done} match${done>1?'s':''} terminé${done>1?'s':''} sur ${all.length} · Dernière publication : ${payload.publishedAt?new Date(payload.publishedAt).toLocaleString('fr-BE'):'—'}`;
+ const summaryLine=publicEl('p','help',`${(payload.rounds||[]).length} tour${payload.rounds?.length===1?'':'s'} · Tableau à élimination directe`);summary.appendChild(summaryLine);
+ (payload.rounds||[]).forEach((r,ri)=>{const col=publicEl('section','public-tournament-round');col.appendChild(publicEl('h3','',r.title||('Tour '+(ri+1))));(r.matches||[]).forEach(m=>{const card=publicEl('article','public-tournament-match');card.appendChild(publicEl('strong','',`Match ${m.number||''}`));[m.p1,m.p2].forEach(n=>{const name=n||'En attente';const line=publicEl('div','public-player'+(m.winner&&m.winner===n?' winner':''),name==='BYE'?'BYE':name);card.appendChild(line);});let state=m.winner?('Vainqueur : '+m.winner):((m.p1&&m.p2)?'Résultat à déterminer':'Match à compléter');if(m.bye)state='Qualification automatique (BYE)';card.appendChild(publicEl('div','public-status',state));col.appendChild(card);});roundsEl.appendChild(col);});
+ const finalRound=(payload.rounds||[]).slice(-1)[0];const finalMatch=(finalRound?.matches||[]).length===1?finalRound.matches[0]:null;
+ if(finalMatch?.winner){podium.appendChild(publicEl('h3','','Classement final'));podium.appendChild(publicEl('div','match-card','🏆 Vainqueur : '+finalMatch.winner));const finalist=[finalMatch.p1,finalMatch.p2].find(n=>n&&n!==finalMatch.winner&&n!=='BYE');if(finalist)podium.appendChild(publicEl('div','match-card','Finaliste : '+finalist));}
+}
+async function loadPublicTournament(){
+ const status=$('publicTournamentStatus');if(!supabase){status.textContent='Connexion au service en ligne indisponible.';return;}
+ const {data,error}=await supabase.from('dart_tournament_public').select('payload,updated_at').eq('id',PUBLIC_TOURNAMENT_ROW).maybeSingle();
+ if(error){status.textContent='Impossible de charger le tournoi : '+error.message+'. Vérifie la table dart_tournament_public, ses droits de lecture et la configuration Realtime dans Supabase.';return;}
+ renderPublicTournament(data?.payload||null);
+}
+$('publicTournamentRefresh')?.addEventListener('click',loadPublicTournament);
+if(supabase){supabase.channel('dart-tournament-public-live').on('postgres_changes',{event:'*',schema:'public',table:'dart_tournament_public'},()=>{if($('publicTournamentPage')?.classList.contains('active'))loadPublicTournament();}).subscribe();setInterval(()=>{if($('publicTournamentPage')?.classList.contains('active'))loadPublicTournament();},10000);}
+function tournamentSave(){try{localStorage.setItem(TOURNAMENT_TEST_KEY,JSON.stringify(tournamentTest));}catch(e){} tournamentRender();schedulePublicTournamentSync();}
+function tournamentId(){return 'tm_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7);}
+function tournamentAllAssigned(roundIndex,ignoreId=''){const set=new Set();for(const m of (tournamentTest.rounds[roundIndex]?.matches||[])){if(m.id===ignoreId)continue;if(m.p1&&m.p1!=='BYE')set.add(m.p1);if(m.p2&&m.p2!=='BYE')set.add(m.p2);}return set;}
+function tournamentWinners(roundIndex){return (tournamentTest.rounds[roundIndex]?.matches||[]).map(m=>m.winner).filter(Boolean);}
+function tournamentSyncAutomaticRounds(fromIndex=0){
+ // Les matchs terminés sont verrouillés : aucune synchronisation automatique ne remplace leurs joueurs, sources ou vainqueur.
+ for(let ri=fromIndex;ri<tournamentTest.rounds.length;ri++){
+  const prev=tournamentTest.rounds[ri]; if(!prev||!Array.isArray(prev.matches))continue;
+  const needed=prev.matches.length>=2?Math.ceil(prev.matches.length/2):0; if(needed===0)continue;
+  if(!tournamentTest.rounds[ri+1])tournamentTest.rounds[ri+1]={matches:[]};
+  const next=tournamentTest.rounds[ri+1]; if(!Array.isArray(next.matches))next.matches=[];
+  let linked=next.matches.filter(m=>m.autoLinked);
+  while(linked.length<needed){const m={id:tournamentId(),p1:'',p2:'',winner:'',winnerOnly:true,autoLinked:true,source1:'',source2:''};next.matches.push(m);linked.push(m);}
+  // Ne supprime jamais un match automatique s'il est commencé ou terminé.
+  while(linked.length>needed){const obsolete=linked[linked.length-1];const onlyAutoBye=!!obsolete.autoByeAdvance;if((obsolete.winner&&!onlyAutoBye)||(obsolete.p1&&obsolete.p2&&!onlyAutoBye)){break;}linked.pop();const idx=next.matches.findIndex(m=>m.id===obsolete.id);if(idx>=0)next.matches.splice(idx,1);}
+  linked.forEach((m,i)=>{
+   if(m.manualOverride)return; // Le match conserve sa place dans le tableau, mais ses joueurs ont été ajustés manuellement.
+   const a=prev.matches[i*2],b=prev.matches[i*2+1];
+   const newSource1=a?.id||'',newSource2=b?.id||'',new1=a?.winner||'',new2=b?(b.winner||''):'BYE';
+   const changed=(m.source1||'')!==newSource1||(m.source2||'')!==newSource2||m.p1!==new1||m.p2!==new2;
+   if(m.winner && changed){m.lockedConflict=true;return;}
+   m.source1=newSource1;m.source2=newSource2;m.p1=new1;m.p2=new2;m.lockedConflict=false;
+   if(m.p1==='BYE'&&m.p2&&m.p2!=='BYE'){m.winner=m.p2;m.autoByeAdvance=true;}
+   else if(m.p2==='BYE'&&m.p1&&m.p1!=='BYE'){m.winner=m.p1;m.autoByeAdvance=true;}
+   else {m.autoByeAdvance=false;if(m.winner!==m.p1&&m.winner!==m.p2)m.winner='';}
+  });
+ }
+}
+function tournamentHasStartedMatchesAfter(roundIndex,matchIndex=-1){
+ return tournamentTest.rounds.some((r,ri)=>ri>roundIndex&&(r.matches||[]).some(m=>m.winner||(m.p1&&m.p2)));
+}
+function tournamentDeleteMatch(roundIndex,matchIndex){
+ const target=tournamentTest.rounds[roundIndex]?.matches?.[matchIndex];
+ if(!target)return;
+ const later=(tournamentTest.rounds.slice(roundIndex+1)).flatMap(r=>r.matches||[]);
+ const completed=later.filter(m=>m.winner);
+ const started=later.filter(m=>m.p1&&m.p2&&!m.winner);
+ const targetLabel='Match '+(matchIndex+1)+' du tour '+(roundIndex+1);
+ let warning='Supprimer '+targetLabel+' ?';
+ if(target.winner) warning+='\n\nCe match est terminé : son résultat sera supprimé.';
+ if(target.autoLinked) warning+='\n\nCe match est généré automatiquement, mais tu peux le supprimer. Le tableau sera recalculé.';
+ if(completed.length) warning+='\n\nATTENTION : '+completed.length+' match(s) suivant(s) sont terminés. Pour éviter des résultats incohérents, les tours suivants seront supprimés, y compris ces résultats.';
+ else if(started.length) warning+='\n\n'+started.length+' match(s) suivant(s) sont déjà préparés. Ils seront recalculés après la suppression.';
+ if(!confirm(warning))return;
+ tournamentTest.rounds[roundIndex].matches.splice(matchIndex,1);
+ if(completed.length){tournamentTest.rounds.splice(roundIndex+1);}
+ else {
+  // Les tours automatiques suivants peuvent dépendre du match supprimé : les reconstruire plutôt que garder des liaisons erronées.
+  tournamentTest.rounds.splice(roundIndex+1);
+ }
+ tournamentSyncAutomaticRounds(0);tournamentSave();
+ $('tournamentMessage').textContent='Match supprimé. Les tours suivants ont été recalculés. Vérifie les rencontres avant de poursuivre.';
+}
+
+function tournamentCreateNextRound(roundIndex){
+ const round=tournamentTest.rounds[roundIndex];
+ if(!round || (round.matches||[]).length<2){$('tournamentMessage').textContent='Ajoute au moins deux matchs à ce tour pour créer automatiquement le suivant.';return;}
+ const count=(round.matches||[]).length;
+ const currentNext=tournamentTest.rounds[roundIndex+1];
+ if(count===2 && currentNext?.matches?.length===1 && currentNext.matches[0].autoLinked){$('tournamentMessage').textContent='La finale est déjà créée. Les vainqueurs des deux demi-finales y seront reportés automatiquement.';return;}
+ tournamentSyncAutomaticRounds(roundIndex);
+ $('tournamentMessage').textContent=count===2?'La finale est créée. Les vainqueurs des deux matchs y seront reportés automatiquement.':'Le tour suivant est créé automatiquement, avec un BYE si le nombre de matchs est impair. Le tableau continuera jusqu’à la finale.';
+ tournamentSave();
+}
+function tournamentAddMatch(roundIndex,manual=true){
+ if(!(tournamentTest.testPlayers?.length||playerRoster.length)){ $('tournamentMessage').textContent='La liste des joueurs est vide. Charge les 60 joueurs de test ou ajoute des joueurs dans l’onglet Joueurs.';return;}
+ tournamentTest.rounds[roundIndex].matches.push({id:tournamentId(),p1:'',p2:'',winner:'',winnerOnly:false,autoLinked:false});
+ tournamentSyncAutomaticRounds(Math.max(0,roundIndex));
+ $('tournamentMessage').textContent='Match ajouté. Si ce tour contient deux matchs ou plus, le tour suivant se construit automatiquement.';tournamentSave();
+}
+function tournamentRender(){
+ const savedWindowX=window.scrollX, savedWindowY=window.scrollY;
+ const oldScroll=document.querySelector('#tournamentRounds .bracket-scroll');
+ const savedBracketX=oldScroll?.scrollLeft||0, savedBracketY=oldScroll?.scrollTop||0;
+ tournamentSyncAutomaticRounds(0);
+ const name=$('tournamentName');if(name&&name.value!==tournamentTest.name)name.value=tournamentTest.name;
+ const workspace=$('tournamentWorkspace');if(workspace)workspace.classList.toggle('hidden',!tournamentTest.name.trim());
+ const title=$('tournamentCurrentTitle');if(title)title.textContent=tournamentTest.name?'Tournoi : '+tournamentTest.name:'Tableau du tournoi';
+ const rounds=$('tournamentRounds');if(!rounds)return;rounds.innerHTML='';
+ if(!tournamentTest.rounds.length){rounds.innerHTML='<div class="bracket-empty">Ton tableau est prêt. Clique sur « + Ajouter le premier match » pour commencer.</div>';return;}
+ const scroll=document.createElement('div');scroll.className='bracket-scroll';const bracket=document.createElement('div');bracket.className='bracket';
+ tournamentTest.rounds.forEach((round,ri)=>{
+  const col=document.createElement('section');col.className='bracket-round';
+  const heading=document.createElement('div');heading.className='bracket-round-title';heading.textContent=publicRoundTitle(round,ri,tournamentTest.rounds.length);col.appendChild(heading);
+  const matches=document.createElement('div');matches.className='bracket-round-matches';matches.dataset.roundIndex=String(ri);
+  (round.matches||[]).forEach((m,mi)=>{
+   const card=document.createElement('article');card.className='bracket-match'+(ri===tournamentTest.rounds.length-1&&round.matches.length===1?' bracket-final':'');card.dataset.matchId=m.id;
+   const top=document.createElement('div');top.className='bracket-match-top';const label=document.createElement('strong');label.textContent='Match '+(mi+1);const del=document.createElement('button');del.type='button';del.textContent='Supprimer';del.className='danger';del.style.width='auto';del.disabled=false;del.title=m.autoLinked?'Supprimer ce match automatique et recalculer les tours suivants.':'Supprimer ce match';del.addEventListener('click',()=>tournamentDeleteMatch(ri,mi));top.append(label,del);card.appendChild(top);
+   const used=tournamentAllAssigned(ri,m.id);const roster=tournamentTest.testPlayers?.length?tournamentTest.testPlayers:playerRoster;const eligible=m.winnerOnly&&ri>0?tournamentWinners(ri-1):roster;
+   function makePlayerSelect(field,caption){const wrap=document.createElement('label');wrap.style.margin='0';wrap.style.color='var(--muted)';wrap.style.fontSize='11px';wrap.textContent=caption;const sel=document.createElement('select');const empty=document.createElement('option');empty.value='';empty.textContent=m.autoLinked?'En attente du vainqueur':(m.winnerOnly&&ri>0?'Choisir un vainqueur':'Choisir un joueur');sel.appendChild(empty);Array.from(new Set([...eligible,'BYE'])).sort((a,b)=>a==='BYE'?-1:b==='BYE'?1:a.localeCompare(b,'fr')).forEach(n=>{if(n==='BYE'||((!used.has(n)||m[field]===n)&&n!==(field==='p1'?m.p2:m.p1))){ const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);}});sel.value=m[field]||'';const editableAutoBye=!!m.autoLinked&&((m.p1==='BYE'||m.p2==='BYE')||!!m.manualOverride);sel.disabled=(!!m.autoLinked&&!editableAutoBye)||!!m.winner;sel.title=m.autoLinked&&!editableAutoBye?'Ce joueur provient automatiquement du match précédent.':'Clique ici pour remplacer le BYE ou corriger les joueurs de ce match.';sel.addEventListener('change',()=>{if(m.winner){$('tournamentMessage').textContent='Ce match est terminé : ses participants sont verrouillés.';return;}if(m.p1&&m.p2&&!confirm('Modifier ce match préparé ? Les matchs suivants pourront nécessiter une vérification.')){tournamentRender();return;}if(m.autoLinked){m.manualOverride=true;m.winnerOnly=false;m.source1='';m.source2='';m.lockedConflict=false;}m[field]=sel.value;m.winner='';m.autoByeAdvance=false;if(m.p1==='BYE'&&m.p2&&m.p2!=='BYE'){m.winner=m.p2;m.autoByeAdvance=true;}else if(m.p2==='BYE'&&m.p1&&m.p1!=='BYE'){m.winner=m.p1;m.autoByeAdvance=true;}tournamentSyncAutomaticRounds(ri);tournamentSave();});wrap.appendChild(sel);return wrap;}
+   const p1=makePlayerSelect('p1','Joueur 1');const p2=makePlayerSelect('p2','Joueur 2');card.append(p1,p2);
+
+   const winnerWrap=document.createElement('label');winnerWrap.className='winner-select';winnerWrap.style.marginBottom='0';winnerWrap.textContent='Vainqueur';const win=document.createElement('select');[['','À déterminer'],[m.p1,m.p1||'Joueur 1'],[m.p2,m.p2||'Joueur 2']].forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;win.appendChild(o);});win.value=m.winner||'';win.disabled=!(m.p1&&m.p2)||!!m.winner;win.addEventListener('change',()=>{m.winner=win.value;tournamentSave();});winnerWrap.appendChild(win);card.appendChild(winnerWrap);
+   matches.appendChild(card);
+  });
+  if(!round.matches.length){const empty=document.createElement('div');empty.className='bracket-empty';empty.textContent='Aucun match dans ce tour.';matches.appendChild(empty);}
+  col.appendChild(matches);
+  const add=document.createElement('button');add.type='button';add.className='bracket-add';add.textContent='+ Ajouter un match';add.addEventListener('click',()=>tournamentAddMatch(ri,true));col.appendChild(add);
+  const next=document.createElement('button');next.type='button';next.className='bracket-next';
+  const roundMatchCount=(round.matches||[]).length;
+  const hasFinal=tournamentTest.rounds[ri+1]?.matches?.length===1;
+  next.textContent=ri<tournamentTest.rounds.length-1?(roundMatchCount===2&&!hasFinal?'Créer la finale':'Actualiser les matchs suivants'):(roundMatchCount===2?'Créer la finale':'Créer / actualiser le tour suivant');
+  next.addEventListener('click',()=>tournamentCreateNextRound(ri));col.appendChild(next);
+  bracket.appendChild(col);
+ });
+ scroll.appendChild(bracket);rounds.appendChild(scroll);
+ requestAnimationFrame(()=>{tournamentLayoutBracket(bracket);tournamentDrawConnectors(bracket); const newScroll=rounds.querySelector('.bracket-scroll'); if(newScroll){newScroll.scrollLeft=savedBracketX;newScroll.scrollTop=savedBracketY;} window.scrollTo(savedWindowX,savedWindowY); });
+}
+function tournamentLayoutBracket(bracket){
+ if(!bracket)return;
+ const slot=164, cardHeight=142, roundsEls=[...bracket.querySelectorAll('.bracket-round')], centers=new Map();
+ tournamentTest.rounds.forEach((round,ri)=>{
+  const col=roundsEls[ri];if(!col)return;
+  const area=col.querySelector('.bracket-round-matches');if(!area)return;
+  const cards=[...area.querySelectorAll('.bracket-match')];let maxBottom=0;
+  cards.forEach((card,mi)=>{
+   const match=(round.matches||[]).find(m=>m.id===card.dataset.matchId);let center;
+   if(ri===0){center=cardHeight/2+mi*slot;}
+   else if(match?.autoLinked){const c1=centers.get(match.source1),c2=centers.get(match.source2);center=(c1!=null&&c2!=null)?(c1+c2)/2:cardHeight/2+mi*slot*Math.pow(2,ri);}
+   else {center=cardHeight/2+mi*slot*Math.pow(2,ri);}
+   const top=Math.max(0,center-cardHeight/2);card.style.position='absolute';card.style.left='0';card.style.right='0';card.style.top=top+'px';card.style.width='100%';centers.set(match?.id||card.dataset.matchId,center);maxBottom=Math.max(maxBottom,top+Math.max(cardHeight,card.offsetHeight));
+  });
+  area.style.height=Math.max(cardHeight,maxBottom)+'px';
+ });
+}
+function tournamentDrawConnectors(bracket){
+ if(!bracket)return;
+ bracket.querySelector('.bracket-connectors')?.remove();
+ const rect=bracket.getBoundingClientRect();
+ const width=Math.max(bracket.scrollWidth,rect.width),height=Math.max(bracket.scrollHeight,rect.height);
+ const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('class','bracket-connectors');svg.setAttribute('width',width);svg.setAttribute('height',height);svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
+ const point=(id,side)=>{const el=[...bracket.querySelectorAll('.bracket-match')].find(x=>x.dataset.matchId===id);if(!el)return null;const r=el.getBoundingClientRect();return {x:(side==='right'?r.right:r.left)-rect.left+bracket.scrollLeft,y:r.top-rect.top+bracket.scrollTop+r.height/2};};
+ tournamentTest.rounds.forEach((round,ri)=>{if(ri===0)return;(round.matches||[]).filter(m=>m.autoLinked).forEach(m=>{const a=point(m.source1,'right'),b=point(m.source2,'right'),t=point(m.id,'left');if(!a||!b||!t)return;const midX=Math.round((a.x+t.x)/2);[a,b].forEach(src=>{const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',`M ${src.x} ${src.y} H ${midX} V ${t.y} H ${t.x}`);path.setAttribute('fill','none');path.setAttribute('stroke','#d6a83e');path.setAttribute('stroke-width','2');path.setAttribute('stroke-linecap','round');path.setAttribute('stroke-linejoin','round');svg.appendChild(path);});});});
+ bracket.prepend(svg);
+}
+$('tournamentLoadTestPlayers')?.addEventListener('click',()=>{
+ const names=['Alex Martin','Thomas Dubois','Lucas Bernard','Nathan Petit','Hugo Robert','Louis Richard','Jules Durand','Gabriel Leroy','Arthur Moreau','Adam Simon','Noah Laurent','Liam Lefebvre','Ethan Michel','Mathis Garcia','Raphaël David','Maxime Bertrand','Enzo Roux','Théo Vincent','Antoine Fournier','Paul Morel','Nicolas Girard','Quentin André','Romain Mercier','Julien Dupont','Kevin Lambert','Sébastien Bonnet','Dylan François','Cédric Martinez','Benjamin Legrand','Florian Gauthier','Manon Simon','Emma Laurent','Léa Michel','Chloé Garcia','Jade David','Louise Bertrand','Alice Roux','Inès Vincent','Zoé Fournier','Camille Morel','Sarah Girard','Julie André','Laura Mercier','Marie Dupont','Anaïs Lambert','Clara Bonnet','Eva François','Lola Martinez','Nina Legrand','Élise Gauthier','Milan Noël','Bastien Denis','Yanis Dumont','Axel Marchand','Simon Renard','Damien Boyer','Olivier Lemaire','Patrick Fontaine','Frédéric Chevalier','Vincent François'];
+ if(tournamentTest.rounds.some(r=>(r.matches||[]).some(m=>m.p1||m.p2||m.winner))&&!confirm('Remplacer la liste de joueurs du tournoi peut rendre certains choix indisponibles. Continuer ?'))return;
+ tournamentTest.testPlayers=names;$('tournamentMessage').textContent='60 joueurs fictifs chargés uniquement pour ce tournoi. La liste normale des joueurs et Supabase ne sont pas modifiés.';tournamentSave();
+});
+$('tournamentCreate')?.addEventListener('click',()=>{const n=$('tournamentName').value.trim();if(!n){$('tournamentMessage').textContent='Saisis un nom pour le tournoi.';return;}tournamentTest.name=n;if(!Array.isArray(tournamentTest.rounds))tournamentTest.rounds=[];try{localStorage.setItem(TOURNAMENT_TEST_KEY,JSON.stringify(tournamentTest));}catch(e){}tournamentRender();schedulePublicTournamentSync();$('tournamentMessage').textContent='Tournoi « '+n+' » enregistré. Les changements seront synchronisés automatiquement.';});
+$('tournamentName')?.addEventListener('input',e=>{const n=e.target.value.trim();const w=$('tournamentWorkspace');if(w)w.classList.toggle('hidden',!n);const t=$('tournamentCurrentTitle');if(t)t.textContent=n?'Tournoi : '+n:'Tableau du tournoi';});
+$('tournamentAddMatch')?.addEventListener('click',()=>{if(!tournamentTest.name.trim()){ $('tournamentMessage').textContent='Crée d’abord le tournoi en lui donnant un nom.';return;}if(!tournamentTest.rounds.length)tournamentTest.rounds.push({matches:[]});tournamentAddMatch(tournamentTest.rounds.length-1,true);});
+$('tournamentReset')?.addEventListener('click',()=>{if(!isOrganizer){$('tournamentMessage').textContent='Connexion organisateur requise.';return;}if(confirm('Réinitialiser le tournoi et vider aussi son récapitulatif public ?')){tournamentTest={name:'',rounds:[],testPlayers:[]};$('tournamentName').value='';$('tournamentWorkspace').classList.add('hidden');try{localStorage.removeItem(TOURNAMENT_TEST_KEY);}catch(e){}$('tournamentMessage').textContent='Réinitialisation en cours…';tournamentSave();}});
+tournamentRender();
+
 drawTarget();freshLeg();renderPlayerSelectors(true);renderPlayersList();render();renderBoardFilters();renderLiveBoards();renderBoardPicker();setOrganizerUI();
 })();
 </script>
