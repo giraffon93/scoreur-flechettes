@@ -249,14 +249,14 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 </div>
 <div id="tournamentPage" class="page">
 <section class="panel">
-  <h2>Mode tournoi — version de test</h2>
+  <h2>Mode tournoi</h2>
   <p class="status">Le tournoi est préparé par l’organisateur. Chaque modification est synchronisée automatiquement en ligne pour que les visiteurs voient son évolution en temps réel. Le scoreur 501 et ses tables restent séparés.</p>
   <label>Nom du tournoi<input id="tournamentName" maxlength="80" placeholder="Ex. Tournoi du club"></label>
   <div class="actions"><button id="tournamentCreate" class="primary" type="button">Créer / enregistrer le tournoi</button><button id="tournamentReset" class="danger" type="button">Réinitialiser le tournoi test</button></div>
   <div id="tournamentWorkspace" class="hidden">
     <h3 id="tournamentCurrentTitle">Matchs du tournoi</h3>
     <p class="help">Ajoute les matchs un par un, puis choisis les deux joueurs dans chaque match. Un joueur ne peut être sélectionné que dans un seul match du même tour. Les cibles restent libres.</p>
-    <div class="actions"><button id="tournamentAddMatch" type="button" class="primary">+ Ajouter le premier match</button><button id="tournamentLoadTestPlayers" type="button">Charger 60 joueurs de test</button></div><p class="help">Les 60 noms de test sont isolés de la liste normale des joueurs et de Supabase.</p>
+    <div class="actions"><button id="tournamentAddMatch" type="button" class="primary">+ Ajouter le premier match</button></div><p class="help">Les joueurs proposés dans les matchs proviennent directement de ta liste enregistrée dans l’onglet Joueurs et synchronisée avec Supabase.</p>
     <div id="tournamentRounds" class="list" style="margin-top:12px"></div>
   </div>
   <div id="tournamentMessage" class="status" role="status">Saisis le nom du tournoi puis clique sur « Créer / enregistrer le tournoi ».</div>
@@ -445,7 +445,7 @@ async function loadPlayerRoster(){
  if(error){console.warn('Chargement des joueurs:',error.message);return;}
  playerRoster=(data||[]).map(x=>String(x.name||'').trim()).filter(Boolean);
  try{localStorage.setItem(PLAYER_ROSTER_KEY,JSON.stringify(playerRoster));}catch(e){}
- renderPlayerSelectors(true);renderPlayersList();
+ renderPlayerSelectors(true);renderPlayersList();if(typeof tournamentRender==='function')tournamentRender();
 }
 async function addPlayer(){
  if(!canManagePlayers()){$('playersMessage').textContent='Permission Joueurs requise.';return;}
@@ -1303,8 +1303,8 @@ $('export').addEventListener('click',()=>{
 });
 // Mode tournoi de test : stockage local uniquement, isolé des tables et RPC Supabase.
 const TOURNAMENT_TEST_KEY='dartsTournamentPrototype_v1';
-let tournamentTest={name:'',rounds:[],testPlayers:[]};
-try{const raw=JSON.parse(localStorage.getItem(TOURNAMENT_TEST_KEY)||'null');if(raw&&typeof raw==='object')tournamentTest={name:String(raw.name||''),rounds:Array.isArray(raw.rounds)?raw.rounds:[],testPlayers:Array.isArray(raw.testPlayers)?raw.testPlayers:[]};}catch(e){}
+let tournamentTest={name:'',rounds:[]};
+try{const raw=JSON.parse(localStorage.getItem(TOURNAMENT_TEST_KEY)||'null');if(raw&&typeof raw==='object')tournamentTest={name:String(raw.name||''),rounds:Array.isArray(raw.rounds)?raw.rounds:[]};}catch(e){}
 const PUBLIC_TOURNAMENT_ROW='main';
 function publicTournamentSnapshot(){return {name:tournamentTest.name,rounds:(tournamentTest.rounds||[]).map((r,ri)=>({title:publicRoundTitle(r,ri,tournamentTest.rounds.length),matches:(r.matches||[]).map((m,mi)=>({number:mi+1,p1:m.p1||'',p2:m.p2||'',winner:m.winner||'',bye:!!m.autoByeAdvance}))})),publishedAt:new Date().toISOString()};}
 function publicRoundTitle(round,ri,total){const n=(round.matches||[]).length;if(n===16)return 'Seizièmes de finale';if(n===8)return 'Huitièmes de finale';if(n===4)return 'Quarts de finale';if(n===2)return 'Demi-finales';if(n===1&&ri===total-1)return 'Finale';return 'Tour '+(ri+1)+' · '+n+' match'+(n>1?'s':'');}
@@ -1414,7 +1414,7 @@ function tournamentCreateNextRound(roundIndex){
  tournamentSave();
 }
 function tournamentAddMatch(roundIndex,manual=true){
- if(!(tournamentTest.testPlayers?.length||playerRoster.length)){ $('tournamentMessage').textContent='La liste des joueurs est vide. Charge les 60 joueurs de test ou ajoute des joueurs dans l’onglet Joueurs.';return;}
+ if(!playerRoster.length){ $('tournamentMessage').textContent='La liste des joueurs est vide. Ajoute d’abord tes joueurs dans l’onglet Joueurs.';return;}
  tournamentTest.rounds[roundIndex].matches.push({id:tournamentId(),p1:'',p2:'',winner:'',winnerOnly:false,autoLinked:false});
  tournamentSyncAutomaticRounds(Math.max(0,roundIndex));
  $('tournamentMessage').textContent='Match ajouté. Si ce tour contient deux matchs ou plus, le tour suivant se construit automatiquement.';tournamentSave();
@@ -1437,7 +1437,7 @@ function tournamentRender(){
   (round.matches||[]).forEach((m,mi)=>{
    const card=document.createElement('article');card.className='bracket-match'+(ri===tournamentTest.rounds.length-1&&round.matches.length===1?' bracket-final':'');card.dataset.matchId=m.id;
    const top=document.createElement('div');top.className='bracket-match-top';const label=document.createElement('strong');label.textContent='Match '+(mi+1);const del=document.createElement('button');del.type='button';del.textContent='Supprimer';del.className='danger';del.style.width='auto';del.disabled=false;del.title=m.autoLinked?'Supprimer ce match automatique et recalculer les tours suivants.':'Supprimer ce match';del.addEventListener('click',()=>tournamentDeleteMatch(ri,mi));top.append(label,del);card.appendChild(top);
-   const used=tournamentAllAssigned(ri,m.id);const roster=tournamentTest.testPlayers?.length?tournamentTest.testPlayers:playerRoster;const eligible=m.winnerOnly&&ri>0?tournamentWinners(ri-1):roster;
+   const used=tournamentAllAssigned(ri,m.id);const eligible=m.winnerOnly&&ri>0?tournamentWinners(ri-1):playerRoster;
    function makePlayerSelect(field,caption){const wrap=document.createElement('label');wrap.style.margin='0';wrap.style.color='var(--muted)';wrap.style.fontSize='11px';wrap.textContent=caption;const sel=document.createElement('select');const empty=document.createElement('option');empty.value='';empty.textContent=m.autoLinked?'En attente du vainqueur':(m.winnerOnly&&ri>0?'Choisir un vainqueur':'Choisir un joueur');sel.appendChild(empty);Array.from(new Set([...eligible,'BYE'])).sort((a,b)=>a==='BYE'?-1:b==='BYE'?1:a.localeCompare(b,'fr')).forEach(n=>{if(n==='BYE'||((!used.has(n)||m[field]===n)&&n!==(field==='p1'?m.p2:m.p1))){ const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);}});sel.value=m[field]||'';const editableAutoBye=!!m.autoLinked&&((m.p1==='BYE'||m.p2==='BYE')||!!m.manualOverride);sel.disabled=(!!m.autoLinked&&!editableAutoBye)||!!m.winner;sel.title=m.autoLinked&&!editableAutoBye?'Ce joueur provient automatiquement du match précédent.':'Clique ici pour remplacer le BYE ou corriger les joueurs de ce match.';sel.addEventListener('change',()=>{if(m.winner){$('tournamentMessage').textContent='Ce match est terminé : ses participants sont verrouillés.';return;}if(m.p1&&m.p2&&!confirm('Modifier ce match préparé ? Les matchs suivants pourront nécessiter une vérification.')){tournamentRender();return;}if(m.autoLinked){m.manualOverride=true;m.winnerOnly=false;m.source1='';m.source2='';m.lockedConflict=false;}m[field]=sel.value;m.winner='';m.autoByeAdvance=false;if(m.p1==='BYE'&&m.p2&&m.p2!=='BYE'){m.winner=m.p2;m.autoByeAdvance=true;}else if(m.p2==='BYE'&&m.p1&&m.p1!=='BYE'){m.winner=m.p1;m.autoByeAdvance=true;}tournamentSyncAutomaticRounds(ri);tournamentSave();});wrap.appendChild(sel);return wrap;}
    const p1=makePlayerSelect('p1','Joueur 1');const p2=makePlayerSelect('p2','Joueur 2');card.append(p1,p2);
 
@@ -1484,15 +1484,10 @@ function tournamentDrawConnectors(bracket){
  tournamentTest.rounds.forEach((round,ri)=>{if(ri===0)return;(round.matches||[]).filter(m=>m.autoLinked).forEach(m=>{const a=point(m.source1,'right'),b=point(m.source2,'right'),t=point(m.id,'left');if(!a||!b||!t)return;const midX=Math.round((a.x+t.x)/2);[a,b].forEach(src=>{const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',`M ${src.x} ${src.y} H ${midX} V ${t.y} H ${t.x}`);path.setAttribute('fill','none');path.setAttribute('stroke','#d6a83e');path.setAttribute('stroke-width','2');path.setAttribute('stroke-linecap','round');path.setAttribute('stroke-linejoin','round');svg.appendChild(path);});});});
  bracket.prepend(svg);
 }
-$('tournamentLoadTestPlayers')?.addEventListener('click',()=>{
- const names=['Alex Martin','Thomas Dubois','Lucas Bernard','Nathan Petit','Hugo Robert','Louis Richard','Jules Durand','Gabriel Leroy','Arthur Moreau','Adam Simon','Noah Laurent','Liam Lefebvre','Ethan Michel','Mathis Garcia','Raphaël David','Maxime Bertrand','Enzo Roux','Théo Vincent','Antoine Fournier','Paul Morel','Nicolas Girard','Quentin André','Romain Mercier','Julien Dupont','Kevin Lambert','Sébastien Bonnet','Dylan François','Cédric Martinez','Benjamin Legrand','Florian Gauthier','Manon Simon','Emma Laurent','Léa Michel','Chloé Garcia','Jade David','Louise Bertrand','Alice Roux','Inès Vincent','Zoé Fournier','Camille Morel','Sarah Girard','Julie André','Laura Mercier','Marie Dupont','Anaïs Lambert','Clara Bonnet','Eva François','Lola Martinez','Nina Legrand','Élise Gauthier','Milan Noël','Bastien Denis','Yanis Dumont','Axel Marchand','Simon Renard','Damien Boyer','Olivier Lemaire','Patrick Fontaine','Frédéric Chevalier','Vincent François'];
- if(tournamentTest.rounds.some(r=>(r.matches||[]).some(m=>m.p1||m.p2||m.winner))&&!confirm('Remplacer la liste de joueurs du tournoi peut rendre certains choix indisponibles. Continuer ?'))return;
- tournamentTest.testPlayers=names;$('tournamentMessage').textContent='60 joueurs fictifs chargés uniquement pour ce tournoi. La liste normale des joueurs et Supabase ne sont pas modifiés.';tournamentSave();
-});
 $('tournamentCreate')?.addEventListener('click',()=>{const n=$('tournamentName').value.trim();if(!n){$('tournamentMessage').textContent='Saisis un nom pour le tournoi.';return;}tournamentTest.name=n;if(!Array.isArray(tournamentTest.rounds))tournamentTest.rounds=[];try{localStorage.setItem(TOURNAMENT_TEST_KEY,JSON.stringify(tournamentTest));}catch(e){}tournamentRender();schedulePublicTournamentSync();$('tournamentMessage').textContent='Tournoi « '+n+' » enregistré. Les changements seront synchronisés automatiquement.';});
 $('tournamentName')?.addEventListener('input',e=>{const n=e.target.value.trim();const w=$('tournamentWorkspace');if(w)w.classList.toggle('hidden',!n);const t=$('tournamentCurrentTitle');if(t)t.textContent=n?'Tournoi : '+n:'Tableau du tournoi';});
 $('tournamentAddMatch')?.addEventListener('click',()=>{if(!tournamentTest.name.trim()){ $('tournamentMessage').textContent='Crée d’abord le tournoi en lui donnant un nom.';return;}if(!tournamentTest.rounds.length)tournamentTest.rounds.push({matches:[]});tournamentAddMatch(tournamentTest.rounds.length-1,true);});
-$('tournamentReset')?.addEventListener('click',()=>{if(!canManageTournaments()){$('tournamentMessage').textContent='Ton compte ne possède pas le droit de gérer les tournois.';return;}if(confirm('Réinitialiser le tournoi et vider aussi son récapitulatif public ?')){tournamentTest={name:'',rounds:[],testPlayers:[]};$('tournamentName').value='';$('tournamentWorkspace').classList.add('hidden');try{localStorage.removeItem(TOURNAMENT_TEST_KEY);}catch(e){}$('tournamentMessage').textContent='Réinitialisation en cours…';tournamentSave();}});
+$('tournamentReset')?.addEventListener('click',()=>{if(!canManageTournaments()){$('tournamentMessage').textContent='Ton compte ne possède pas le droit de gérer les tournois.';return;}if(confirm('Réinitialiser le tournoi et vider aussi son récapitulatif public ?')){tournamentTest={name:'',rounds:[]};$('tournamentName').value='';$('tournamentWorkspace').classList.add('hidden');try{localStorage.removeItem(TOURNAMENT_TEST_KEY);}catch(e){}$('tournamentMessage').textContent='Réinitialisation en cours…';tournamentSave();}});
 tournamentRender();
 
 drawTarget();freshLeg();renderPlayerSelectors(true);renderPlayersList();render();renderBoardFilters();renderLiveBoards();renderBoardPicker();setOrganizerUI();
