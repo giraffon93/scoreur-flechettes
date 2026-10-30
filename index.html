@@ -145,7 +145,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 
 <header><h1>Scoreur de fléchettes</h1><p>Score en direct · synchronisation en ligne entre appareils</p><div id="cloudStatus" class="status" role="status">Connexion à la base en cours…</div>
 <div id="authControls">
-  <label id="emailLabel">E-mail organisateur<input id="organizerEmail" type="email" autocomplete="username" placeholder="Adresse e-mail"></label>
+  <label id="emailLabel">Pseudo<input id="organizerEmail" type="text" autocomplete="username" maxlength="30" placeholder="Ton pseudo"></label>
   <label id="passwordLabel">Mot de passe<input id="organizerPassword" type="password" autocomplete="current-password" placeholder="Mot de passe"></label>
   <button id="loginButton" type="button">Connexion organisateur</button>
   <button id="logoutButton" type="button" class="hidden">Déconnexion</button>
@@ -281,7 +281,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
   <h3>Créer un organisateur</h3>
   <div class="grid2">
    <label>Nom affiché<input id="adminNewName" maxlength="60" placeholder="Nom de l’organisateur"></label>
-   <label>Adresse e-mail<input id="adminNewEmail" type="email" placeholder="organisateur@exemple.be"></label>
+   <label>Pseudo<input id="adminNewUsername" type="text" maxlength="30" autocomplete="off" placeholder="Ex. JeanDarts"></label>
    <label>Mot de passe initial<input id="adminNewPassword" type="password" minlength="8" placeholder="8 caractères minimum"></label>
    <div style="display:flex;align-items:end"><button id="adminCreateButton" class="primary" type="button">Créer le compte</button></div>
   </div>
@@ -487,26 +487,27 @@ async function refreshOrganizerAdmin(){
   users.forEach(user=>{
    const card=document.createElement('article');card.className='history-row';
    const head=document.createElement('div');head.style.display='flex';head.style.justifyContent='space-between';head.style.gap='12px';head.style.flexWrap='wrap';
-   const identity=document.createElement('div');const title=document.createElement('strong');title.textContent=user.display_name||'Organisateur';const email=document.createElement('div');email.className='muted';email.textContent=user.email||'E-mail indisponible';identity.append(title,email);
+   const identity=document.createElement('div');const title=document.createElement('strong');title.textContent=user.display_name||'Organisateur';const email=document.createElement('div');email.className='muted';email.textContent='Pseudo : '+(user.username||user.email?.split('@')[0]||'—');identity.append(title,email);
    const status=document.createElement('span');status.className='tag';status.textContent=user.is_admin?'ADMINISTRATEUR':(user.is_active?'ACTIF':'DÉSACTIVÉ');head.append(identity,status);card.append(head);
    if(user.is_admin){const note=document.createElement('p');note.className='help';note.textContent='Compte administrateur protégé.';card.append(note);list.append(card);return;}
    const perms=[['can_manage_matches','Gérer les matchs 501'],['can_manage_players','Gérer les joueurs'],['can_manage_tournaments','Gérer les tournois'],['can_manage_results','Gérer les résultats'],['can_access_settings','Accéder aux paramètres']];
    const grid=document.createElement('div');grid.style.display='grid';grid.style.gridTemplateColumns='repeat(auto-fit,minmax(190px,1fr))';grid.style.gap='7px';grid.style.marginTop='12px';
-   perms.forEach(([field,label])=>{const wrap=document.createElement('label');wrap.style.display='flex';wrap.style.alignItems='center';wrap.style.gap='8px';wrap.style.margin='0';wrap.style.color='var(--text)';const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!user[field];cb.style.width='auto';cb.addEventListener('change',async()=>{cb.disabled=true;const payload={action:'update_permissions',user_id:user.user_id,[field]:cb.checked};try{await callOrganizerAdmin(payload);adminMessage('Permission mise à jour pour '+(user.display_name||user.email)+'.');}catch(e){cb.checked=!cb.checked;adminMessage(e.message,true);}finally{cb.disabled=false;}});wrap.append(cb,document.createTextNode(label));grid.append(wrap);});
+   perms.forEach(([field,label])=>{const wrap=document.createElement('label');wrap.style.display='flex';wrap.style.alignItems='center';wrap.style.gap='8px';wrap.style.margin='0';wrap.style.color='var(--text)';const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!user[field];cb.style.width='auto';cb.addEventListener('change',async()=>{cb.disabled=true;const payload={action:'update_permissions',user_id:user.user_id,[field]:cb.checked};try{await callOrganizerAdmin(payload);adminMessage('Permission mise à jour pour '+(user.display_name||user.username||'cet organisateur')+'.');}catch(e){cb.checked=!cb.checked;adminMessage(e.message,true);}finally{cb.disabled=false;}});wrap.append(cb,document.createTextNode(label));grid.append(wrap);});
    card.append(grid);
    const actions=document.createElement('div');actions.className='actions';actions.style.marginTop='12px';
-   const active=document.createElement('button');active.type='button';active.textContent=user.is_active?'Désactiver le compte':'Réactiver le compte';active.addEventListener('click',async()=>{if(!confirm((user.is_active?'Désactiver':'Réactiver')+' le compte de '+(user.display_name||user.email)+' ?'))return;active.disabled=true;try{await callOrganizerAdmin({action:'set_active',user_id:user.user_id,is_active:!user.is_active});adminMessage('Statut du compte mis à jour.');await refreshOrganizerAdmin();}catch(e){adminMessage(e.message,true);active.disabled=false;}});
+   const active=document.createElement('button');active.type='button';active.textContent=user.is_active?'Désactiver le compte':'Réactiver le compte';active.addEventListener('click',async()=>{if(!confirm((user.is_active?'Désactiver':'Réactiver')+' le compte de '+(user.display_name||user.username||'cet organisateur')+' ?'))return;active.disabled=true;try{await callOrganizerAdmin({action:'set_active',user_id:user.user_id,is_active:!user.is_active});adminMessage('Statut du compte mis à jour.');await refreshOrganizerAdmin();}catch(e){adminMessage(e.message,true);active.disabled=false;}});
    const reset=document.createElement('button');reset.type='button';reset.textContent='Réinitialiser le mot de passe';reset.addEventListener('click',async()=>{const password=prompt('Nouveau mot de passe (8 caractères minimum) :');if(password===null)return;if(password.length<8){adminMessage('Le mot de passe doit contenir au moins 8 caractères.',true);return;}reset.disabled=true;try{await callOrganizerAdmin({action:'reset_password',user_id:user.user_id,password});adminMessage('Mot de passe réinitialisé.');}catch(e){adminMessage(e.message,true);}finally{reset.disabled=false;}});
-   const del=document.createElement('button');del.type='button';del.className='danger';del.textContent='Supprimer';del.addEventListener('click',async()=>{if(!confirm('Supprimer définitivement le compte de '+(user.display_name||user.email)+' ?'))return;del.disabled=true;try{await callOrganizerAdmin({action:'delete',user_id:user.user_id});adminMessage('Compte supprimé.');await refreshOrganizerAdmin();}catch(e){adminMessage(e.message,true);del.disabled=false;}});
+   const del=document.createElement('button');del.type='button';del.className='danger';del.textContent='Supprimer';del.addEventListener('click',async()=>{if(!confirm('Supprimer définitivement le compte de '+(user.display_name||user.username||'cet organisateur')+' ?'))return;del.disabled=true;try{await callOrganizerAdmin({action:'delete',user_id:user.user_id});adminMessage('Compte supprimé.');await refreshOrganizerAdmin();}catch(e){adminMessage(e.message,true);del.disabled=false;}});
    actions.append(active,reset,del);card.append(actions);list.append(card);
   });
  }catch(e){if(list)list.innerHTML='';adminMessage(e.message,true);}
 }
 $('adminCreateButton')?.addEventListener('click',async()=>{
- const display_name=$('adminNewName').value.trim(),email=$('adminNewEmail').value.trim(),password=$('adminNewPassword').value;
- if(!display_name||!email||password.length<8){adminMessage('Nom, e-mail et mot de passe de 8 caractères minimum requis.',true);return;}
+ const display_name=$('adminNewName').value.trim(),username=$('adminNewUsername').value.trim(),password=$('adminNewPassword').value;
+ if(!display_name||!username||password.length<8){adminMessage('Nom, pseudo et mot de passe de 8 caractères minimum requis.',true);return;}
+ if(!/^[a-zA-Z0-9._-]{3,30}$/.test(username)){adminMessage('Le pseudo doit contenir 3 à 30 caractères : lettres, chiffres, point, tiret ou souligné.',true);return;}
  const btn=$('adminCreateButton');btn.disabled=true;
- try{await callOrganizerAdmin({action:'create',display_name,email,password});$('adminNewName').value='';$('adminNewEmail').value='';$('adminNewPassword').value='';adminMessage('Compte organisateur créé. Il dispose initialement du droit de gérer les matchs 501.');await refreshOrganizerAdmin();}
+ try{await callOrganizerAdmin({action:'create',display_name,username,password});$('adminNewName').value='';$('adminNewUsername').value='';$('adminNewPassword').value='';adminMessage('Compte organisateur créé. Il dispose initialement du droit de gérer les matchs 501.');await refreshOrganizerAdmin();}
  catch(e){adminMessage(e.message,true);}finally{btn.disabled=false;}
 });
 $('adminRefreshButton')?.addEventListener('click',refreshOrganizerAdmin);
@@ -723,8 +724,10 @@ if(supabase){
 }else cloudMessage('Impossible de charger Supabase.');
 $('loginButton').addEventListener('click',async()=>{
   if(!supabase){$('authStatus').textContent='Supabase ne se charge pas.';return;}
-  const email=$('organizerEmail').value.trim(),password=$('organizerPassword').value;
-  if(!email||!password){$('authStatus').textContent='Entre ton e-mail et ton mot de passe.';return;}
+  const username=$('organizerEmail').value.trim(),password=$('organizerPassword').value;
+  if(!username||!password){$('authStatus').textContent='Entre ton pseudo et ton mot de passe.';return;}
+  if(!/^[a-zA-Z0-9._-]{3,30}$/.test(username)){$('authStatus').textContent='Format de pseudo invalide.';return;}
+  const email=username.toLowerCase()+'@organisateurs.scoreur-flechettes.invalid';
   $('loginButton').disabled=true;$('authStatus').textContent='Connexion en cours…';
   const {error}=await supabase.auth.signInWithPassword({email,password});
   $('loginButton').disabled=false;
