@@ -1301,13 +1301,19 @@ $('clearSaved').addEventListener('click',async()=>{
  const btn=$('clearSaved');btn.disabled=true;
  setResultsMessage('Suppression des résultats en cours…');
  try{
-  let query=supabase.from('dart_saved_results').delete().select('id');
-  // Supabase exige un filtre WHERE explicite, même pour effacer toutes les cibles.
-  if(filter==='all')query=query.in('board_number',[1,2,3,4,5,6,7,8]);
-  else query=query.eq('board_number',Number(filter));
-  const {data:deletedRows,error}=await query;
-  if(error)throw error;
-  const deletedCount=Array.isArray(deletedRows)?deletedRows.length:0;
+  let deletedCount=0;
+  if(filter==='all'){
+   // Suppression cible par cible : chaque DELETE possède son propre filtre WHERE.
+   for(let n=1;n<=8;n++){
+    const {data:deletedRows,error}=await supabase.from('dart_saved_results').delete().eq('board_number',n).select('id');
+    if(error)throw new Error('Cible '+n+' : '+(error.message||String(error)));
+    deletedCount+=Array.isArray(deletedRows)?deletedRows.length:0;
+   }
+  } else {
+   const {data:deletedRows,error}=await supabase.from('dart_saved_results').delete().eq('board_number',Number(filter)).select('id');
+   if(error)throw error;
+   deletedCount=Array.isArray(deletedRows)?deletedRows.length:0;
+  }
   if(filter==='all'){
    for(let n=1;n<=8;n++)try{localStorage.removeItem('dartsSavedMatches_board_'+n)}catch(e){}
    try{localStorage.removeItem('dartsSavedMatches_board_none')}catch(e){}
