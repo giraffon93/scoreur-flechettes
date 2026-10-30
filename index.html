@@ -145,7 +145,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 
 <header><h1>Scoreur de fléchettes</h1><p>Score en direct · synchronisation en ligne entre appareils</p><div id="cloudStatus" class="status" role="status">Connexion à la base en cours…</div>
 <div id="authControls">
-  <label id="emailLabel">Pseudo<input id="organizerEmail" type="text" autocomplete="username" maxlength="30" placeholder="Ton pseudo"></label>
+  <label id="emailLabel">Adresse e-mail ou pseudo<input id="organizerEmail" type="text" autocomplete="username" placeholder="Adresse e-mail ou pseudo"></label>
   <label id="passwordLabel">Mot de passe<input id="organizerPassword" type="password" autocomplete="current-password" placeholder="Mot de passe"></label>
   <button id="loginButton" type="button">Connexion organisateur</button>
   <button id="logoutButton" type="button" class="hidden">Déconnexion</button>
@@ -724,10 +724,15 @@ if(supabase){
 }else cloudMessage('Impossible de charger Supabase.');
 $('loginButton').addEventListener('click',async()=>{
   if(!supabase){$('authStatus').textContent='Supabase ne se charge pas.';return;}
-  const username=$('organizerEmail').value.trim(),password=$('organizerPassword').value;
-  if(!username||!password){$('authStatus').textContent='Entre ton pseudo et ton mot de passe.';return;}
-  if(!/^[a-zA-Z0-9._-]{3,30}$/.test(username)){$('authStatus').textContent='Format de pseudo invalide.';return;}
-  const email=username.toLowerCase()+'@organisateurs.scoreur-flechettes.invalid';
+  const identity=$('organizerEmail').value.trim(),password=$('organizerPassword').value;
+  if(!identity||!password){$('authStatus').textContent='Entre ton adresse e-mail ou ton pseudo, puis ton mot de passe.';return;}
+  // Les comptes historiques et l'administrateur se connectent avec leur e-mail.
+  // Les nouveaux organisateurs peuvent utiliser leur pseudo.
+  let email=identity;
+  if(!identity.includes('@')){
+    if(!/^[a-zA-Z0-9._-]{3,30}$/.test(identity)){$('authStatus').textContent='Format de pseudo invalide.';return;}
+    email=identity.toLowerCase()+'@organisateurs.scoreur-flechettes.invalid';
+  }
   $('loginButton').disabled=true;$('authStatus').textContent='Connexion en cours…';
   const {error}=await supabase.auth.signInWithPassword({email,password});
   $('loginButton').disabled=false;
