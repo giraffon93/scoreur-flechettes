@@ -540,7 +540,7 @@ function cloudMessage(msg, ok=false) {
 function snapshotForCloud() {
   return {names:[...state.names],start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,format:state.format,customLegs:Number($('customLegs').value)||11,
     scores:[...state.scores],active:state.active,darts:state.darts,opened:[...state.opened],legs:[...state.legs],history:state.history,
-    finished:state.finished,winner:state.winner,legNo:state.legNo,legStarter:state.legStarter,matchStarted:state.matchStarted,resultSaved:!!state.resultSaved,saved:getSaved(),players:[...playerRoster]};
+    finished:state.finished,winner:state.winner,legNo:state.legNo,legStarter:state.legStarter,matchStarted:state.matchStarted,resultSaved:!!state.resultSaved,players:[]};
 }
 function applyCloudSnapshot(data, remoteUpdatedAt=null) {
   if (!data || typeof data !== 'object' || !Array.isArray(data.names)) return;
@@ -580,16 +580,7 @@ function applyCloudSnapshot(data, remoteUpdatedAt=null) {
       if (data.customLegs != null) $('customLegs').value=String(data.customLegs);
       $('customLegsLabel').classList.toggle('hidden',$('format').value!=='custom');
     }
-    if (Array.isArray(data.saved)) {
-      try {
-        const local=getSaved();
-        const merged=[...data.saved];
-        const key=m=>m.id||[m.date,(m.names||[]).join('|'),(m.legs||[]).join('|'),m.winner||''].join('::');
-        const seen=new Set(merged.map(key));
-        for(const match of local){const k=key(match);if(!seen.has(k)){merged.push(match);seen.add(k);}}
-        localStorage.setItem(savedStorageKey(),JSON.stringify(merged));
-      } catch(e) {}
-    }
+    // Les résultats sont désormais gérés séparément dans dart_saved_results.
     render();
   } finally { applyingRemote=false; }
 }
@@ -1152,7 +1143,7 @@ async function loadSavedResults(){
 }
 async function persistSavedResult(record){
  if(!supabase){$('toast').textContent='Supabase indisponible : résultat conservé localement uniquement.';return false;}
- const {error}=await supabase.from('dart_saved_results').upsert({id:record.id,board_number:Number(record.target),result:record},{onConflict:'id'});
+ const {error}=await supabase.from('dart_saved_results').insert({id:record.id,board_number:Number(record.target),result:record});
  if(error){$('toast').textContent='Résultat conservé localement, synchronisation impossible : '+error.message;return false;}
  await loadSavedResults();return true;
 }
@@ -1289,7 +1280,7 @@ $('clearSaved').addEventListener('click',async()=>{
   if(filter!=='all')query=query.eq('board_number',Number(filter));
   const {error}=await query;
   if(error)throw error;
-  if(filter==='all'){for(let n=1;n<=8;n++)try{localStorage.removeItem('dartsSavedMatches_board_'+n)}catch(e){}}
+  if(filter==='all'){for(let n=1;n<=8;n++)try{localStorage.removeItem('dartsSavedMatches_board_'+n)}catch(e){} try{localStorage.removeItem('dartsSavedMatches_board_none')}catch(e){}}
   else try{localStorage.removeItem('dartsSavedMatches_board_'+filter)}catch(e){}
   await loadSavedResults();selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSaved();
   $('toast').textContent='Résultats supprimés.';
