@@ -382,6 +382,7 @@ let localMatchStartLockUntil = 0;
 let remoteBoards = {};
 const PLAYER_ROSTER_KEY = 'dartsPlayersRoster';
 let playerRoster = [];
+let playerRosterLoadSequence = 0;
 try { const savedPlayers=JSON.parse(localStorage.getItem(PLAYER_ROSTER_KEY)||'[]'); if(Array.isArray(savedPlayers)) playerRoster=[...new Set(savedPlayers.map(x=>String(x).trim()).filter(Boolean))]; } catch(e) {}
 function renderPlayerSelectors(keepCurrent=false){
   for(const id of ['p1','p2']){
@@ -441,9 +442,17 @@ async function persistPlayerRoster(){
 }
 async function loadPlayerRoster(){
  if(!supabase)return;
+ const requestId=++playerRosterLoadSequence;
  const {data,error}=await supabase.from('dart_players').select('name').order('name');
- if(error){console.warn('Chargement des joueurs:',error.message);return;}
- playerRoster=(data||[]).map(x=>String(x.name||'').trim()).filter(Boolean);
+ if(requestId!==playerRosterLoadSequence)return; // ignore une réponse devenue obsolète
+ if(error){
+  console.warn('Chargement des joueurs:',error.message);
+  const message=$('playersMessage');
+  if(message)message.textContent='Impossible de charger la liste des joueurs : '+error.message;
+  return;
+ }
+ const names=(data||[]).map(x=>String(x.name||'').trim()).filter(Boolean);
+ playerRoster=[...new Map(names.map(name=>[name.toLocaleLowerCase('fr'),name])).values()];
  try{localStorage.setItem(PLAYER_ROSTER_KEY,JSON.stringify(playerRoster));}catch(e){}
  renderPlayerSelectors(true);renderPlayersList();if(typeof tournamentRender==='function')tournamentRender();
 }
@@ -590,8 +599,9 @@ async function loadBoardStates() {
   const {data,error}=await supabase.from('dart_boards').select('board_number,match_state,updated_at').order('board_number');
   if(error){cloudMessage('Lecture Supabase impossible : '+error.message);return;}
   remoteBoards={}; (data||[]).forEach(row=>remoteBoards[String(row.board_number)]=row);
-  const cloudPlayers=remoteBoards['1']?.match_state?.players;
-  if(Array.isArray(cloudPlayers)){playerRoster=[...new Set(cloudPlayers.map(x=>String(x).trim()).filter(Boolean))];try{localStorage.setItem(PLAYER_ROSTER_KEY,JSON.stringify(playerRoster));}catch(e){}}
+  // La liste officielle des joueurs est stockée dans dart_players.
+  // Ne jamais la remplacer par match_state.players : ce champ historique
+  // est vide (players: []) et appartient aux données d'une cible, pas au roster.
   renderPlayerSelectors(true);renderPlayersList();
   renderLiveBoards(); renderBoardPicker(); renderSaved(); cloudReady=true;
   if(activeBoard && remoteBoards[String(activeBoard)]?.match_state?.names) applyCloudSnapshot(remoteBoards[String(activeBoard)].match_state, remoteBoards[String(activeBoard)].updated_at);
