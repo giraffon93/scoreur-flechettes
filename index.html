@@ -38,7 +38,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .list{display:grid;gap:8px}.match-card,.history-row{border:1px solid var(--line);border-radius:9px;padding:10px;background:#141820}
 .match-card.current{border-color:var(--accent)}.match-head{display:flex;justify-content:space-between;gap:8px;align-items:center}.tag{font-size:11px;color:#161616;background:var(--accent);padding:4px 9px;border-radius:99px;white-space:nowrap;font-weight:800}
 .tag.status-live{background:#25b864;color:#071b0f;border:1px solid #49d982}
-.tag.status-free{background:#ffd45a;color:#211900;border:1px solid #ffe28a}\n.tag.status-prep{background:#f0a43a;color:#241500;border:1px solid #ffc46b}
+.tag.status-free{background:#ffd45a;color:#211900;border:1px solid #ffe28a}\n.tag.status-prep{background:#ff8c00;color:#000;border:1px solid #ffad42}
 /* Tableau général compact : 4 colonnes x 2 lignes sur grand écran */
 #boardFilters{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px}
 #boardFilters label{display:flex;align-items:center;gap:5px;margin:0;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#141820;color:var(--text);font-size:13px}
@@ -1292,12 +1292,33 @@ function updateBoardNav(){
  document.querySelectorAll('nav [data-page="tournamentPage"]').forEach(b=>b.classList.toggle('hidden',!canManageTournaments()));
  const pill=$('boardPill'); if(pill)pill.style.display=canManageMatches()&&activeBoard?'block':'none';
 }
-function showPage(pageId){
+async function showPage(pageId){
  const publicPages=['overviewPage','resultsPage','publicTournamentPage'];
  const allowed=pageId==='adminPage'?organizerPermissions.is_admin:pageId==='playersPage'?canManagePlayers():pageId==='tournamentPage'?canManageTournaments():['boardSelectPage','setupPage','gamePage'].includes(pageId)?canManageMatches():publicPages.includes(pageId);
  if(!allowed)pageId='overviewPage';
  if(pageId==='publicTournamentPage')loadPublicTournament();
  if(['setupPage','gamePage'].includes(pageId)&&!activeBoard)pageId='overviewPage';
+ const currentPage=document.querySelector('.page.active')?.id;
+ // Quitter les réglages sans démarrer annule la réservation : la cible redevient libre.
+ if(currentPage==='setupPage' && pageId!=='setupPage' && activeBoard && state.preparing && !state.matchStarted){
+   const boardToRelease=String(activeBoard);
+   clearTimeout(saveTimer);saveTimer=null;
+   settingsFromForm();
+   state.preparing=false;
+   const released=await saveBoardState(boardToRelease,snapshotForCloud());
+   if(!released){
+     state.preparing=true;
+     render();
+     alert('La cible n’a pas pu être libérée dans Supabase. Reste sur cette page et réessaie.');
+     return;
+   }
+   activeBoard='';
+   try{sessionStorage.removeItem('dartsActiveBoard')}catch(e){}
+   setupFormDirty=false;
+   $('p1').value='';$('p2').value='';
+   updatePlayerSelectOptions();
+   updateBoardNav();
+ }
  document.querySelectorAll('nav [data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===pageId));
  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===pageId));
  if(pageId==='adminPage')refreshOrganizerAdmin();
