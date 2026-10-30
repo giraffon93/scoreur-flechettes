@@ -154,7 +154,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 <nav aria-label="Menu principal">
 <button class="active" data-page="overviewPage">Vue des cibles</button><button class="organizer-only hidden" data-page="playersPage">Joueurs</button><button class="organizer-only hidden" data-page="boardSelectPage">Choisir une cible</button><button class="board-only hidden" data-page="setupPage">Préparation</button>
 <button class="board-only hidden" data-page="gamePage">Cible & score</button>
-<button class="organizer-only hidden" data-page="tournamentPage">Tournoi (TEST)</button>
+<button class="organizer-only hidden" data-page="tournamentPage">Tournoi (TEST)</button><button id="adminNavButton" class="hidden" data-page="adminPage">Administration</button>
 <button data-page="resultsPage">Résultats</button><button data-page="publicTournamentPage">Tournoi</button>
 </nav>
 <div class="board-pill" id="boardPill" style="display:none">Cible active : <strong id="activeBoardLabel">—</strong></div>
@@ -274,6 +274,23 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
   <div id="historyDetails" class="hidden" style="margin-top:18px"><h3>Volées du match sélectionné</h3><p class="help" id="historyMatchLabel">Volées du match choisi.</p><div id="history" class="list"></div></div>
 </section>
 </div>
+<div id="adminPage" class="page">
+ <section class="panel">
+  <h2>Administration des organisateurs</h2>
+  <p class="help">Création des comptes et attribution individuelle des permissions. La gestion des comptes est réservée à l’administrateur principal.</p>
+  <h3>Créer un organisateur</h3>
+  <div class="grid2">
+   <label>Nom affiché<input id="adminNewName" maxlength="60" placeholder="Nom de l’organisateur"></label>
+   <label>Adresse e-mail<input id="adminNewEmail" type="email" placeholder="organisateur@exemple.be"></label>
+   <label>Mot de passe initial<input id="adminNewPassword" type="password" minlength="8" placeholder="8 caractères minimum"></label>
+   <div style="display:flex;align-items:end"><button id="adminCreateButton" class="primary" type="button">Créer le compte</button></div>
+  </div>
+  <div id="adminMessage" class="status" role="status">Gestion des comptes.</div>
+  <div class="actions" style="margin:12px 0"><button id="adminRefreshButton" type="button">Actualiser la liste</button></div>
+  <h3>Comptes et permissions</h3>
+  <div id="adminOrganizerList" class="list"><div class="muted">Chargement des organisateurs…</div></div>
+ </section>
+</div>
 </main>
 </div>
 <div id="bullChoiceModal" class="bull-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="bullChoiceTitle">
@@ -352,6 +369,12 @@ function getDartDeviceId(){
 }
 const dartDeviceId=getDartDeviceId();
 let cloudReady = false, applyingRemote = false, saveTimer = null, channel = null, isOrganizer = false;
+let organizerPermissions = {is_admin:false,is_active:false,can_manage_matches:false,can_manage_players:false,can_manage_tournaments:false,can_manage_results:false,can_access_settings:false};
+const canManageMatches=()=>isOrganizer&&organizerPermissions.is_active&&(organizerPermissions.is_admin||organizerPermissions.can_manage_matches);
+const canManagePlayers=()=>isOrganizer&&organizerPermissions.is_active&&(organizerPermissions.is_admin||organizerPermissions.can_manage_players);
+const canManageTournaments=()=>isOrganizer&&organizerPermissions.is_active&&(organizerPermissions.is_admin||organizerPermissions.can_manage_tournaments);
+const canManageResults=()=>isOrganizer&&organizerPermissions.is_active&&(organizerPermissions.is_admin||organizerPermissions.can_manage_results);
+const canAccessSettings=()=>isOrganizer&&organizerPermissions.is_active&&(organizerPermissions.is_admin||organizerPermissions.can_access_settings);
 let lastLocalEditAt = 0;
 let lastAppliedRemoteAt = 0;
 let setupFormDirty = false;
@@ -402,7 +425,7 @@ function renderPlayersList(){
  playerRoster.slice().sort((a,b)=>a.localeCompare(b,'fr')).forEach(name=>{
   const row=document.createElement('div');row.className='history-row';row.style.display='flex';row.style.alignItems='center';row.style.justifyContent='space-between';row.style.gap='12px';
   const label=document.createElement('strong');label.textContent=name;
-  const del=document.createElement('button');del.type='button';del.textContent='Supprimer';del.className='danger';del.style.width='auto';del.disabled=!isOrganizer;del.addEventListener('click',()=>removePlayer(name));
+  const del=document.createElement('button');del.type='button';del.textContent='Supprimer';del.className='danger';del.style.width='auto';del.disabled=!canManagePlayers();del.addEventListener('click',()=>removePlayer(name));
   row.append(label,del);el.appendChild(row);
  });
 }
@@ -410,44 +433,105 @@ async function persistPlayerRoster(){
  playerRoster=[...new Set(playerRoster.map(x=>String(x).trim()).filter(Boolean))];
  try{localStorage.setItem(PLAYER_ROSTER_KEY,JSON.stringify(playerRoster));}catch(e){}
  renderPlayerSelectors(true);renderPlayersList();
- if(!isOrganizer){$('playersMessage').textContent='Connecte-toi en tant qu’organisateur pour enregistrer la liste.';return;}
- if(!supabase||!cloudReady){$('playersMessage').textContent='Liste enregistrée sur cet appareil, mais la synchronisation en ligne n’est pas disponible.';return;}
- const row=remoteBoards['1'];
- if(!row){$('playersMessage').textContent='Liste enregistrée sur cet appareil. Impossible de trouver la cible 1 dans Supabase pour synchroniser.';return;}
- const nextState={...(row.match_state||{}),players:[...playerRoster]};
- const {data,error}=await supabase.rpc('save_dart_board_state',{
-   p_board_number:1,p_device_id:dartDeviceId,p_match_state:nextState
- });
- if(error){$('playersMessage').textContent='Liste enregistrée localement, mais erreur de synchronisation : '+error.message;return;}
- remoteBoards['1']={...row,match_state:data?.match_state||nextState,updated_at:data?.updated_at||new Date().toISOString()};
+ if(!canManagePlayers()){$('playersMessage').textContent='Permission Joueurs requise.';return;}
+ if(!supabase){$('playersMessage').textContent='Supabase indisponible.';return;}
+ const {error}=await supabase.rpc('replace_dart_players',{p_names:playerRoster});
+ if(error){$('playersMessage').textContent='Erreur de synchronisation : '+error.message;return;}
  $('playersMessage').textContent='Liste des joueurs enregistrée et synchronisée.';
- renderLiveBoards();renderBoardPicker();
+}
+async function loadPlayerRoster(){
+ if(!supabase)return;
+ const {data,error}=await supabase.from('dart_players').select('name').order('name');
+ if(error){console.warn('Chargement des joueurs:',error.message);return;}
+ playerRoster=(data||[]).map(x=>String(x.name||'').trim()).filter(Boolean);
+ try{localStorage.setItem(PLAYER_ROSTER_KEY,JSON.stringify(playerRoster));}catch(e){}
+ renderPlayerSelectors(true);renderPlayersList();
 }
 async function addPlayer(){
- if(!isOrganizer){$('playersMessage').textContent='Connecte-toi en tant qu’organisateur pour ajouter des joueurs.';return;}
+ if(!canManagePlayers()){$('playersMessage').textContent='Permission Joueurs requise.';return;}
  const input=$('newPlayerName'),name=input.value.trim();
  if(!name){$('playersMessage').textContent='Saisis un nom ou un surnom.';input.focus();return;}
  if(playerRoster.some(x=>x.toLocaleLowerCase('fr')===name.toLocaleLowerCase('fr'))){$('playersMessage').textContent='Ce joueur est déjà dans la liste.';return;}
  playerRoster.push(name);input.value='';await persistPlayerRoster();
 }
 async function removePlayer(name){
- if(!isOrganizer)return;
+ if(!canManagePlayers())return;
  if(!confirm('Supprimer « '+name+' » de la liste des joueurs ? Les anciens résultats seront conservés.'))return;
  playerRoster=playerRoster.filter(x=>x!==name);await persistPlayerRoster();
  if($('p1').value===name)$('p1').value='';if($('p2').value===name)$('p2').value='';updatePlayerSelectOptions();
 }
+async function refreshOrganizerPermissions(){
+ organizerPermissions={is_admin:false,is_active:false,can_manage_matches:false,can_manage_players:false,can_manage_tournaments:false,can_manage_results:false,can_access_settings:false};
+ if(!supabase||!isOrganizer)return;
+ const {data,error}=await supabase.rpc('get_my_organizer_access');
+ if(error){console.error('Lecture des permissions impossible',error);isOrganizer=false;return;}
+ if(data&&typeof data==='object')organizerPermissions={...organizerPermissions,...data};
+ if(organizerPermissions.is_active!==true)isOrganizer=false;
+}
+async function callOrganizerAdmin(payload){
+ if(!supabase)throw new Error('Supabase indisponible.');
+ const {data,error}=await supabase.functions.invoke('manage-organizers',{body:payload});
+ if(error)throw new Error(error.message||'Erreur de la fonction manage-organizers.');
+ if(data?.error)throw new Error(data.error);
+ return data;
+}
+function adminMessage(message,isError=false){const el=$('adminMessage');if(el){el.textContent=message;el.style.color=isError?'#ff9b9b':'#f1d27c';}}
+async function refreshOrganizerAdmin(){
+ if(!organizerPermissions.is_admin){adminMessage('Accès administrateur refusé.',true);return;}
+ const list=$('adminOrganizerList');if(list)list.innerHTML='<div class="muted">Chargement…</div>';
+ try{
+  const data=await callOrganizerAdmin({action:'list'});
+  list.innerHTML='';
+  const users=Array.isArray(data.users)?data.users:[];
+  if(!users.length){list.innerHTML='<div class="muted">Aucun organisateur.</div>';return;}
+  users.forEach(user=>{
+   const card=document.createElement('article');card.className='history-row';
+   const head=document.createElement('div');head.style.display='flex';head.style.justifyContent='space-between';head.style.gap='12px';head.style.flexWrap='wrap';
+   const identity=document.createElement('div');const title=document.createElement('strong');title.textContent=user.display_name||'Organisateur';const email=document.createElement('div');email.className='muted';email.textContent=user.email||'E-mail indisponible';identity.append(title,email);
+   const status=document.createElement('span');status.className='tag';status.textContent=user.is_admin?'ADMINISTRATEUR':(user.is_active?'ACTIF':'DÉSACTIVÉ');head.append(identity,status);card.append(head);
+   if(user.is_admin){const note=document.createElement('p');note.className='help';note.textContent='Compte administrateur protégé.';card.append(note);list.append(card);return;}
+   const perms=[['can_manage_matches','Gérer les matchs 501'],['can_manage_players','Gérer les joueurs'],['can_manage_tournaments','Gérer les tournois'],['can_manage_results','Gérer les résultats'],['can_access_settings','Accéder aux paramètres']];
+   const grid=document.createElement('div');grid.style.display='grid';grid.style.gridTemplateColumns='repeat(auto-fit,minmax(190px,1fr))';grid.style.gap='7px';grid.style.marginTop='12px';
+   perms.forEach(([field,label])=>{const wrap=document.createElement('label');wrap.style.display='flex';wrap.style.alignItems='center';wrap.style.gap='8px';wrap.style.margin='0';wrap.style.color='var(--text)';const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!user[field];cb.style.width='auto';cb.addEventListener('change',async()=>{cb.disabled=true;const payload={action:'update_permissions',user_id:user.user_id,[field]:cb.checked};try{await callOrganizerAdmin(payload);adminMessage('Permission mise à jour pour '+(user.display_name||user.email)+'.');}catch(e){cb.checked=!cb.checked;adminMessage(e.message,true);}finally{cb.disabled=false;}});wrap.append(cb,document.createTextNode(label));grid.append(wrap);});
+   card.append(grid);
+   const actions=document.createElement('div');actions.className='actions';actions.style.marginTop='12px';
+   const active=document.createElement('button');active.type='button';active.textContent=user.is_active?'Désactiver le compte':'Réactiver le compte';active.addEventListener('click',async()=>{if(!confirm((user.is_active?'Désactiver':'Réactiver')+' le compte de '+(user.display_name||user.email)+' ?'))return;active.disabled=true;try{await callOrganizerAdmin({action:'set_active',user_id:user.user_id,is_active:!user.is_active});adminMessage('Statut du compte mis à jour.');await refreshOrganizerAdmin();}catch(e){adminMessage(e.message,true);active.disabled=false;}});
+   const reset=document.createElement('button');reset.type='button';reset.textContent='Réinitialiser le mot de passe';reset.addEventListener('click',async()=>{const password=prompt('Nouveau mot de passe (8 caractères minimum) :');if(password===null)return;if(password.length<8){adminMessage('Le mot de passe doit contenir au moins 8 caractères.',true);return;}reset.disabled=true;try{await callOrganizerAdmin({action:'reset_password',user_id:user.user_id,password});adminMessage('Mot de passe réinitialisé.');}catch(e){adminMessage(e.message,true);}finally{reset.disabled=false;}});
+   const del=document.createElement('button');del.type='button';del.className='danger';del.textContent='Supprimer';del.addEventListener('click',async()=>{if(!confirm('Supprimer définitivement le compte de '+(user.display_name||user.email)+' ?'))return;del.disabled=true;try{await callOrganizerAdmin({action:'delete',user_id:user.user_id});adminMessage('Compte supprimé.');await refreshOrganizerAdmin();}catch(e){adminMessage(e.message,true);del.disabled=false;}});
+   actions.append(active,reset,del);card.append(actions);list.append(card);
+  });
+ }catch(e){if(list)list.innerHTML='';adminMessage(e.message,true);}
+}
+$('adminCreateButton')?.addEventListener('click',async()=>{
+ const display_name=$('adminNewName').value.trim(),email=$('adminNewEmail').value.trim(),password=$('adminNewPassword').value;
+ if(!display_name||!email||password.length<8){adminMessage('Nom, e-mail et mot de passe de 8 caractères minimum requis.',true);return;}
+ const btn=$('adminCreateButton');btn.disabled=true;
+ try{await callOrganizerAdmin({action:'create',display_name,email,password});$('adminNewName').value='';$('adminNewEmail').value='';$('adminNewPassword').value='';adminMessage('Compte organisateur créé. Il dispose initialement du droit de gérer les matchs 501.');await refreshOrganizerAdmin();}
+ catch(e){adminMessage(e.message,true);}finally{btn.disabled=false;}
+});
+$('adminRefreshButton')?.addEventListener('click',refreshOrganizerAdmin);
+
 function setOrganizerUI() {
-  const shell=$('appShell');
-  shell.classList.toggle('readonly',!isOrganizer);
-  ['p1','p2','start','doubleIn','doubleOut','format','customLegs','newMatch','saveMatch','miss','singleBull','bullseye','undo','endTurn','finishMatch','reset','clearSaved','newPlayerName','addPlayer'].forEach(id=>{const el=$(id);if(el)el.disabled=!isOrganizer;});
-  $('loginButton').classList.toggle('hidden',isOrganizer);
-  $('logoutButton').classList.toggle('hidden',!isOrganizer);
-  $('emailLabel').classList.toggle('hidden',isOrganizer);
-  $('passwordLabel').classList.toggle('hidden',isOrganizer);
-  $('authStatus').textContent=isOrganizer?'Organisateur connecté — modification autorisée':'Mode consultation — connexion organisateur requise pour modifier';
-  updateBoardNav();
-  if(!isOrganizer && ['boardSelectPage','setupPage','gamePage','playersPage'].includes(document.querySelector('.page.active')?.id)) showPage('overviewPage');
-  renderPlayersList();renderSaved();
+ const shell=$('appShell');
+ const matchAccess=canManageMatches();
+ shell.classList.toggle('readonly',!matchAccess);
+ ['p1','p2','start','doubleIn','doubleOut','format','customLegs','newMatch','miss','singleBull','bullseye','undo','endTurn','finishMatch','reset'].forEach(id=>{const el=$(id);if(el)el.disabled=!matchAccess;});
+ $('saveMatch').disabled=!canManageResults();
+ ['newPlayerName','addPlayer'].forEach(id=>{const el=$(id);if(el)el.disabled=!canManagePlayers();});
+ $('clearSaved').disabled=!canManageResults();
+ $('loginButton').classList.toggle('hidden',isOrganizer);
+ $('logoutButton').classList.toggle('hidden',!isOrganizer);
+ $('emailLabel').classList.toggle('hidden',isOrganizer);
+ $('passwordLabel').classList.toggle('hidden',isOrganizer);
+ $('authStatus').textContent=!isOrganizer?'Mode consultation':organizerPermissions.is_admin?'Administrateur principal connecté': 'Organisateur connecté';
+ $('adminNavButton')?.classList.toggle('hidden',!organizerPermissions.is_admin);
+ updateBoardNav();
+ const current=document.querySelector('.page.active')?.id;
+ if(current==='adminPage'&&!organizerPermissions.is_admin)showPage('overviewPage');
+ if(current==='playersPage'&&!canManagePlayers())showPage('overviewPage');
+ if(current==='tournamentPage'&&!canManageTournaments())showPage('overviewPage');
+ if(['boardSelectPage','setupPage','gamePage'].includes(current)&&!matchAccess)showPage('overviewPage');
+ renderPlayersList();renderSaved();
 }
 function cloudMessage(msg, ok=false) {
   const el = $('cloudStatus');
@@ -542,7 +626,7 @@ async function openBoard(n){
   const selected=String(n);
   setupFormDirty = false;
   localMatchStartLockUntil = 0;
-  if(!boardNames[selected] || !isOrganizer) return;
+  if(!boardNames[selected] || !canManageMatches()) return;
 
   // Rafraîchir le statut pour décider à partir de l'état réel de Supabase.
   if(!supabase || !cloudReady){alert('Connexion Supabase pas encore prête. Réessaie dans quelques secondes.');return;}
@@ -619,7 +703,7 @@ function renderBoardPicker(){
   }
 }
 async function saveBoardState() {
-  if(!supabase||!activeBoard||applyingRemote||!cloudReady||!isOrganizer)return;
+  if(!supabase||!activeBoard||applyingRemote||!cloudReady||!canManageMatches())return;
   const snapshot=snapshotForCloud();
   const {data,error}=await supabase.rpc('save_dart_board_state',{
     p_board_number:Number(activeBoard),p_device_id:dartDeviceId,p_match_state:snapshot
@@ -632,19 +716,19 @@ async function saveBoardState() {
   remoteBoards[String(activeBoard)]={...(row||{}),board_number:Number(activeBoard),match_state:data?.match_state||snapshot,updated_at:data?.updated_at||new Date().toISOString()};
   renderLiveBoards();renderBoardPicker();
 }
-function queueCloudSave(){if(applyingRemote||!activeBoard||!cloudReady||!isOrganizer)return;lastLocalEditAt=Date.now();clearTimeout(saveTimer);saveTimer=setTimeout(saveBoardState,300);}
+function queueCloudSave(){if(applyingRemote||!activeBoard||!cloudReady||!canManageMatches())return;lastLocalEditAt=Date.now();clearTimeout(saveTimer);saveTimer=setTimeout(saveBoardState,300);}
 function startRealtime(){
   if(!supabase)return; if(channel)supabase.removeChannel(channel);
   channel=supabase.channel('dart-boards-live').on('postgres_changes',{event:'*',schema:'public',table:'dart_boards'},payload=>{
-    const row=payload.new;if(!row?.board_number)return; remoteBoards[String(row.board_number)]=row;if(String(row.board_number)==='1'&&Array.isArray(row.match_state?.players)){playerRoster=[...new Set(row.match_state.players.map(x=>String(x).trim()).filter(Boolean))];try{localStorage.setItem(PLAYER_ROSTER_KEY,JSON.stringify(playerRoster));}catch(e){}renderPlayerSelectors(true);renderPlayersList();}updatePlayerSelectOptions();renderLiveBoards();renderBoardPicker();renderSaved();
+    const row=payload.new;if(!row?.board_number)return; remoteBoards[String(row.board_number)]=row;updatePlayerSelectOptions();renderLiveBoards();renderBoardPicker();renderSaved();
     if(String(row.board_number)===String(activeBoard)&&row.match_state?.names&&!applyingRemote)applyCloudSnapshot(row.match_state,row.updated_at);
-  }).subscribe(status=>{if(status==='SUBSCRIBED')cloudMessage('Connecté à Supabase · mises à jour en direct',true);});
+  }).on('postgres_changes',{event:'*',schema:'public',table:'dart_players'},()=>loadPlayerRoster()).on('postgres_changes',{event:'*',schema:'public',table:'dart_saved_results'},()=>loadSavedResults()).subscribe(status=>{if(status==='SUBSCRIBED')cloudMessage('Connecté à Supabase · mises à jour en direct',true);});
 }
 if(supabase){
-  loadBoardStates().then(()=>startRealtime());
+  loadBoardStates().then(()=>{loadPlayerRoster();loadSavedResults();startRealtime();});
   setInterval(loadBoardStates,15000);
-  supabase.auth.getSession().then(({data})=>{isOrganizer=!!data?.session;setOrganizerUI();});
-  supabase.auth.onAuthStateChange((_event,session)=>{isOrganizer=!!session;setOrganizerUI();cloudMessage(isOrganizer?'Organisateur connecté · modification autorisée':'Lecture publique active · connexion requise pour modifier',true);if(isOrganizer&&activeBoard&&cloudReady)loadBoardStates();if(isOrganizer&&tournamentTest?.name?.trim())schedulePublicTournamentSync();});
+  supabase.auth.getSession().then(async({data})=>{isOrganizer=!!data?.session;await refreshOrganizerPermissions();setOrganizerUI();});
+  supabase.auth.onAuthStateChange(async(_event,session)=>{isOrganizer=!!session;await refreshOrganizerPermissions();setOrganizerUI();cloudMessage(isOrganizer?'Session organisateur active':'Lecture publique active · connexion requise pour modifier',true);loadPlayerRoster();loadSavedResults();if(canManageMatches()&&activeBoard&&cloudReady)loadBoardStates();if(canManageTournaments()&&tournamentTest?.name?.trim())schedulePublicTournamentSync();if(organizerPermissions.is_admin)refreshOrganizerAdmin();});
 }else cloudMessage('Impossible de charger Supabase.');
 $('loginButton').addEventListener('click',async()=>{
   if(!supabase){$('authStatus').textContent='Supabase ne se charge pas.';return;}
@@ -673,7 +757,7 @@ function freshLeg(starter=0){
  state.opened=[!state.doubleIn,!state.doubleIn];state.finished=false;state.winner=null;state.turnSnapshot=null;state.pendingLegWin=null;
 }
 function openBullChoice(){
- if(!isOrganizer){$('toast').textContent='Connexion organisateur requise pour modifier les scores.';return;}
+ if(!canManageMatches()){$('toast').textContent='Ton compte ne possède pas le droit de gérer les matchs 501.';return;}
  const name1=$('p1').value.trim();
  const name2=$('p2').value.trim();
  if(!name1||!name2){$('matchStatus').textContent='Choisis deux joueurs dans la liste avant de démarrer.';return;}
@@ -698,7 +782,7 @@ $('bullPlayer2').addEventListener('click',()=>{closeBullChoice();startMatch(1);}
 $('bullCancel').addEventListener('click',closeBullChoice);
 $('bullChoiceModal').addEventListener('click',event=>{if(event.target===$('bullChoiceModal'))closeBullChoice();});
 async function startMatch(starter){
- if(!isOrganizer){$('toast').textContent='Connexion organisateur requise pour modifier les scores.';return;}
+ if(!canManageMatches()){$('toast').textContent='Ton compte ne possède pas le droit de gérer les matchs 501.';return;}
  if(starter!==0&&starter!==1)return;
  if(!cloudReady || !supabase || !activeBoard){
    $('toast').textContent='Impossible de démarrer : la connexion Supabase ou la cible active n’est pas prête.';
@@ -869,7 +953,7 @@ function completeTurn(message){
  $('toast').textContent=message+' Tour de '+state.names[state.active]+'.';
  render();
 }
-function saveFinishedResult(){
+async function saveFinishedResult(){
  if(state.resultSaved || !activeBoard) return;
  // If a winner is declared, make sure the saved legs reflect the match format.
  // This also protects the results list if a state update arrives out of order.
@@ -879,8 +963,8 @@ function saveFinishedResult(){
  }
  const record={id:(crypto.randomUUID?crypto.randomUUID():String(Date.now())+'-'+Math.random().toString(16).slice(2)),target:String(activeBoard),names:[...state.names],legs:[...state.legs],winner:state.winner||null,finished:true,start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,date:new Date().toLocaleString('fr-BE'),history:[...state.history]};
  const saved=getSaved(); saved.push(record);
- try{localStorage.setItem(savedStorageKey(),JSON.stringify(saved)); state.resultSaved=true; renderSaved();}
- catch(e){$('toast').textContent='Le match est terminé, mais le résultat n’a pas pu être enregistré localement.';}
+ try{localStorage.setItem(savedStorageKey(),JSON.stringify(saved)); state.resultSaved=true; renderSaved(); await persistSavedResult(record);}
+ catch(e){$('toast').textContent='Le match est terminé, mais le résultat n’a pas pu être enregistré : '+(e?.message||e);}
 }
 async function releaseBoardAndReturnToSetup(message){
   state.matchStarted=false;
@@ -1044,26 +1128,33 @@ function renderHistory(){
  });
 }
 function getSaved(){try{return JSON.parse(localStorage.getItem(savedStorageKey())||'[]')}catch{return []}}
+let cloudSavedResults = [];
 let selectedHistoryMatch = null;
 let selectedHistoryMatchKey = null;
 function savedMatchKey(m){return String(m.id||[m.target||'',m.date||'',(m.names||[]).join('|'),(m.legs||[]).join('|'),m.winner||''].join('::'));}
 function getAllSavedMatches(){
- const all=[];
- // Cloud snapshots are the shared source: each target stores its own saved results.
+ const all=[...cloudSavedResults];
+ // Secours local temporaire pour les résultats créés hors ligne.
  for(let n=1;n<=8;n++){
-  const data=remoteBoards[String(n)]?.match_state;
-  if(Array.isArray(data?.saved)) for(const m of data.saved) all.push({...m,target:String(m.target||n)});
-  // Include local results too, so a recently saved result remains visible before sync completes.
   try{const local=JSON.parse(localStorage.getItem('dartsSavedMatches_board_'+n)||'[]');if(Array.isArray(local))for(const m of local)all.push({...m,target:String(m.target||n)});}catch(e){}
  }
- // Legacy fallback for results saved before target-specific storage was used.
- try{const legacy=JSON.parse(localStorage.getItem('dartsSavedMatches_board_none')||'[]');if(Array.isArray(legacy))for(const m of legacy)all.push({...m,target:String(m.target||activeBoard||'1')});}catch(e){}
+ try{const legacy=JSON.parse(localStorage.getItem('dartsSavedMatches_board_none')||'[]');if(Array.isArray(legacy))for(const m of legacy)all.push({...m,target:String(m.target||'1')});}catch(e){}
  const unique=new Map();
- for(const m of all){
-  const key=m.id||[m.target,m.date,(m.names||[]).join('|'),(m.legs||[]).join('|'),m.winner||''].join('::');
-  if(!unique.has(key))unique.set(key,m);
- }
+ for(const m of all){const key=m.id||[m.target,m.date,(m.names||[]).join('|'),(m.legs||[]).join('|'),m.winner||''].join('::');if(!unique.has(key))unique.set(key,m);}
  return [...unique.values()].sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+}
+async function loadSavedResults(){
+ if(!supabase)return;
+ const {data,error}=await supabase.from('dart_saved_results').select('id,board_number,result,created_at').order('created_at',{ascending:false});
+ if(error){console.warn('Chargement des résultats:',error.message);return;}
+ cloudSavedResults=(data||[]).map(row=>({...row.result,id:row.id,target:String(row.board_number)}));
+ renderSaved();
+}
+async function persistSavedResult(record){
+ if(!supabase){$('toast').textContent='Supabase indisponible : résultat conservé localement uniquement.';return false;}
+ const {error}=await supabase.from('dart_saved_results').upsert({id:record.id,board_number:Number(record.target),result:record},{onConflict:'id'});
+ if(error){$('toast').textContent='Résultat conservé localement, synchronisation impossible : '+error.message;return false;}
+ await loadSavedResults();return true;
 }
 function getFilteredSavedMatches(){
  const filter=$('resultsBoardFilter')?.value||'all';
@@ -1119,22 +1210,32 @@ function renderSelectedMatchHistory(match){
   el.appendChild(div);
  });
 }
-function saveMatch(){
- if(!isOrganizer){$('toast').textContent='Connexion organisateur requise pour enregistrer un résultat.';return;}
+async function saveMatch(){
+ if(!canManageResults()){$('toast').textContent='Ton compte ne possède pas le droit de gérer les résultats.';return;}
  const record={id:(crypto.randomUUID?crypto.randomUUID():String(Date.now())+'-'+Math.random().toString(16).slice(2)),target:String(activeBoard),names:[...state.names],legs:[...state.legs],winner:state.winner||null,finished:state.finished,start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,date:new Date().toLocaleString('fr-BE'),history:[...state.history]};
- const saved=getSaved();saved.push(record);try{localStorage.setItem(savedStorageKey(),JSON.stringify(saved));$('toast').textContent='Résultat enregistré puis synchronisé dès que possible.';}catch(e){$('toast').textContent='Le navigateur bloque le stockage local : le résultat ne peut pas être conservé.';}renderSaved();
+ const saved=getSaved();saved.push(record);try{localStorage.setItem(savedStorageKey(),JSON.stringify(saved));}catch(e){}
+ await persistSavedResult(record);$('toast').textContent='Résultat enregistré.';renderSaved();
 }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function updateBoardNav(){
  // La préparation et le score restent des écrans internes au parcours « Choisir une cible ».
  // On ne les affiche jamais comme onglets séparés pour garder le menu épuré.
  document.querySelectorAll('nav .board-only').forEach(b=>b.classList.add('hidden'));
- document.querySelectorAll('nav .organizer-only').forEach(b=>b.classList.toggle('hidden',!isOrganizer));
- const pill=$('boardPill'); if(pill)pill.style.display=isOrganizer&&activeBoard?'block':'none';
+ document.querySelectorAll('nav [data-page="playersPage"]').forEach(b=>b.classList.toggle('hidden',!canManagePlayers()));
+ document.querySelectorAll('nav [data-page="boardSelectPage"]').forEach(b=>b.classList.toggle('hidden',!canManageMatches()));
+ document.querySelectorAll('nav [data-page="tournamentPage"]').forEach(b=>b.classList.toggle('hidden',!canManageTournaments()));
+ const pill=$('boardPill'); if(pill)pill.style.display=canManageMatches()&&activeBoard?'block':'none';
 }
 function showPage(pageId){
- if(!isOrganizer && !['overviewPage','resultsPage','publicTournamentPage'].includes(pageId))pageId='overviewPage'; if(pageId==='publicTournamentPage')loadPublicTournament();
- if(isOrganizer && ['setupPage','gamePage'].includes(pageId)&&!activeBoard)pageId='overviewPage';document.querySelectorAll('nav [data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===pageId));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===pageId));}
+ const publicPages=['overviewPage','resultsPage','publicTournamentPage'];
+ const allowed=pageId==='adminPage'?organizerPermissions.is_admin:pageId==='playersPage'?canManagePlayers():pageId==='tournamentPage'?canManageTournaments():['boardSelectPage','setupPage','gamePage'].includes(pageId)?canManageMatches():publicPages.includes(pageId);
+ if(!allowed)pageId='overviewPage';
+ if(pageId==='publicTournamentPage')loadPublicTournament();
+ if(['setupPage','gamePage'].includes(pageId)&&!activeBoard)pageId='overviewPage';
+ document.querySelectorAll('nav [data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===pageId));
+ document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===pageId));
+ if(pageId==='adminPage')refreshOrganizerAdmin();
+}
 document.querySelectorAll('nav [data-page]').forEach(btn=>btn.addEventListener('click',()=>showPage(btn.dataset.page)));
 $('format').addEventListener('change',()=>{
  setupFormDirty=true;
@@ -1143,7 +1244,7 @@ $('format').addEventListener('change',()=>{
 ['p1','p2','start','doubleIn','doubleOut','format','customLegs'].forEach(id=>$(id).addEventListener('change',()=>{setupFormDirty=true;}));
 $('p1').addEventListener('change',updatePlayerSelectOptions);$('p2').addEventListener('change',updatePlayerSelectOptions);
 $('addPlayer').addEventListener('click',addPlayer);$('newPlayerName').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addPlayer();}});
-$('newPlayerName').addEventListener('input',()=>{if(!isOrganizer)$('playersMessage').textContent='Connecte-toi en tant qu’organisateur pour gérer les joueurs.';});
+$('newPlayerName').addEventListener('input',()=>{if(!canManagePlayers())$('playersMessage').textContent='Permission Joueurs requise pour modifier la liste.';});
 $('newMatch').addEventListener('click',openBullChoice);
 $('saveMatch').addEventListener('click',saveMatch);
 $('miss').addEventListener('click',()=>addDart({label:'Raté',score:0,double:false,mult:'S',n:0}));
@@ -1151,7 +1252,7 @@ $('singleBull').addEventListener('click',()=>recordBull(25,false));
 $('bullseye').addEventListener('click',()=>recordBull(50,true));
 $('endTurn').addEventListener('click',evaluateTurn);
 $('finishMatch').addEventListener('click',async()=>{
- if(!isOrganizer){$('toast').textContent='Connexion organisateur requise.';return;}
+ if(!canManageMatches()){$('toast').textContent='Ton compte ne possède pas le droit de gérer les matchs 501.';return;}
  if(!state.matchStarted){$('toast').textContent='Aucun match à terminer.';return;}
  if(state.finished){$('toast').textContent='Le match est déjà terminé.';return;}
  if(confirm('Terminer ce match et libérer la cible ? Le résultat sera conservé dans la liste des résultats.')){
@@ -1159,7 +1260,7 @@ $('finishMatch').addEventListener('click',async()=>{
    state.finished=true;
    state.winner=state.legs[0]===state.legs[1]?null:(state.legs[0]>state.legs[1]?state.names[0]:state.names[1]);
   }
-  saveFinishedResult();
+  await saveFinishedResult();
   state.matchStarted=false;
   state.scores=[state.start,state.start];state.active=0;state.darts=[];state.opened=[!state.doubleIn,!state.doubleIn];state.pendingLegWin=null;state.turnSnapshot=null;
   $('toast').textContent='Résultat enregistré ('+state.legs[0]+'–'+state.legs[1]+'). Cible libérée, prête pour un nouveau match.';
@@ -1175,41 +1276,25 @@ $('finishMatch').addEventListener('click',async()=>{
  }
 });
 $('undo').addEventListener('click',undo);
-$('reset').addEventListener('click',()=>{if(!isOrganizer){$('toast').textContent='Connexion organisateur requise.';return;}if(confirm('Réinitialiser le match en cours ?')){settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;freshLeg(state.legStarter);$('toast').textContent='Match réinitialisé.';render()}});
+$('reset').addEventListener('click',()=>{if(!canManageMatches()){$('toast').textContent='Ton compte ne possède pas le droit de gérer les matchs 501.';return;}if(confirm('Réinitialiser le match en cours ?')){settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;freshLeg(state.legStarter);$('toast').textContent='Match réinitialisé.';render()}});
 $('resultsBoardFilter')?.addEventListener('change',()=>{selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSaved();const f=$('resultsBoardFilter').value;$('clearSaved').textContent=f==='all'?'Effacer les résultats de toutes les cibles':'Effacer les résultats de la cible '+f;});
 $('clearSaved').addEventListener('click',async()=>{
- if(!isOrganizer){$('toast').textContent='Connexion organisateur requise.';return;}
+ if(!canManageResults()){$('toast').textContent='Permission Résultats requise.';return;}
  const filter=$('resultsBoardFilter')?.value||'all';
- const targets=filter==='all'?[1,2,3,4,5,6,7,8]:[Number(filter)];
  const description=filter==='all'?'tous les résultats de toutes les cibles':'tous les résultats de la cible '+filter;
  if(!confirm('Effacer '+description+' ? Cette action est définitive.'))return;
  const btn=$('clearSaved');btn.disabled=true;
- let failed=[];
  try{
-  for(const n of targets){
-   try{localStorage.removeItem('dartsSavedMatches_board_'+n)}catch(e){}
-   const row=remoteBoards[String(n)];
-   if(row?.match_state){
-    const nextState={...row.match_state,saved:[]};
-    if(supabase){
-     const {data,error}=await supabase.rpc('save_dart_board_state',{
-       p_board_number:n,p_device_id:dartDeviceId,p_match_state:nextState
-     });
-     if(error){failed.push(n);continue;}
-     remoteBoards[String(n)]={...row,match_state:data?.match_state||nextState,updated_at:data?.updated_at||new Date().toISOString()};
-    }else remoteBoards[String(n)]={...row,match_state:nextState};
-   }
-  }
-  try{
-   const legacy=JSON.parse(localStorage.getItem('dartsSavedMatches_board_none')||'[]');
-   if(filter==='all')localStorage.removeItem('dartsSavedMatches_board_none');
-   else {const kept=Array.isArray(legacy)?legacy.filter(m=>String(m.target||'')!==filter):[];localStorage.setItem('dartsSavedMatches_board_none',JSON.stringify(kept));}
-  }catch(e){}
-  selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSaved();renderLiveBoards();renderBoardPicker();
-  if(failed.length){$('toast').textContent='Suppression partielle : impossible de supprimer les résultats sur la cible '+failed.join(', ')+'. Vérifie la connexion organisateur et réessaie.';}
-  else $('toast').textContent=filter==='all'?'Tous les résultats ont été effacés.':'Les résultats de la cible '+filter+' ont été effacés.';
+  let query=supabase.from('dart_saved_results').delete();
+  if(filter!=='all')query=query.eq('board_number',Number(filter));
+  const {error}=await query;
+  if(error)throw error;
+  if(filter==='all'){for(let n=1;n<=8;n++)try{localStorage.removeItem('dartsSavedMatches_board_'+n)}catch(e){}}
+  else try{localStorage.removeItem('dartsSavedMatches_board_'+filter)}catch(e){}
+  await loadSavedResults();selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSaved();
+  $('toast').textContent='Résultats supprimés.';
  }catch(e){$('toast').textContent='Erreur pendant la suppression : '+(e?.message||e);}
- finally{btn.disabled=!isOrganizer;}
+ finally{btn.disabled=!canManageResults();}
 });
 $('export').addEventListener('click',()=>{
  const saved=getFilteredSavedMatches();if(!saved.length){$('toast').textContent='Aucun résultat à exporter pour ce filtre.';return}
@@ -1229,11 +1314,11 @@ let publicTournamentSyncInFlight=false;
 let publicTournamentSyncQueued=false;
 function schedulePublicTournamentSync(){
  clearTimeout(publicTournamentSyncTimer);
- if(!isOrganizer||!supabase)return;
+ if(!canManageTournaments()||!supabase)return;
  publicTournamentSyncTimer=setTimeout(()=>publishPublicTournament(true),450);
 }
 async function publishPublicTournament(silent=false){
- if(!isOrganizer||!supabase){if(!silent)$('tournamentMessage').textContent='Connexion organisateur requise : le tournoi reste enregistré uniquement dans ce navigateur tant que tu n’es pas connecté.';return;}
+ if(!canManageTournaments()||!supabase){if(!silent)$('tournamentMessage').textContent='Connexion organisateur requise : le tournoi reste enregistré uniquement dans ce navigateur tant que tu n’es pas connecté.';return;}
  if(publicTournamentSyncInFlight){publicTournamentSyncQueued=true;return;}
  publicTournamentSyncInFlight=true;
  const payload=publicTournamentSnapshot();
@@ -1408,7 +1493,7 @@ $('tournamentLoadTestPlayers')?.addEventListener('click',()=>{
 $('tournamentCreate')?.addEventListener('click',()=>{const n=$('tournamentName').value.trim();if(!n){$('tournamentMessage').textContent='Saisis un nom pour le tournoi.';return;}tournamentTest.name=n;if(!Array.isArray(tournamentTest.rounds))tournamentTest.rounds=[];try{localStorage.setItem(TOURNAMENT_TEST_KEY,JSON.stringify(tournamentTest));}catch(e){}tournamentRender();schedulePublicTournamentSync();$('tournamentMessage').textContent='Tournoi « '+n+' » enregistré. Les changements seront synchronisés automatiquement.';});
 $('tournamentName')?.addEventListener('input',e=>{const n=e.target.value.trim();const w=$('tournamentWorkspace');if(w)w.classList.toggle('hidden',!n);const t=$('tournamentCurrentTitle');if(t)t.textContent=n?'Tournoi : '+n:'Tableau du tournoi';});
 $('tournamentAddMatch')?.addEventListener('click',()=>{if(!tournamentTest.name.trim()){ $('tournamentMessage').textContent='Crée d’abord le tournoi en lui donnant un nom.';return;}if(!tournamentTest.rounds.length)tournamentTest.rounds.push({matches:[]});tournamentAddMatch(tournamentTest.rounds.length-1,true);});
-$('tournamentReset')?.addEventListener('click',()=>{if(!isOrganizer){$('tournamentMessage').textContent='Connexion organisateur requise.';return;}if(confirm('Réinitialiser le tournoi et vider aussi son récapitulatif public ?')){tournamentTest={name:'',rounds:[],testPlayers:[]};$('tournamentName').value='';$('tournamentWorkspace').classList.add('hidden');try{localStorage.removeItem(TOURNAMENT_TEST_KEY);}catch(e){}$('tournamentMessage').textContent='Réinitialisation en cours…';tournamentSave();}});
+$('tournamentReset')?.addEventListener('click',()=>{if(!canManageTournaments()){$('tournamentMessage').textContent='Ton compte ne possède pas le droit de gérer les tournois.';return;}if(confirm('Réinitialiser le tournoi et vider aussi son récapitulatif public ?')){tournamentTest={name:'',rounds:[],testPlayers:[]};$('tournamentName').value='';$('tournamentWorkspace').classList.add('hidden');try{localStorage.removeItem(TOURNAMENT_TEST_KEY);}catch(e){}$('tournamentMessage').textContent='Réinitialisation en cours…';tournamentSave();}});
 tournamentRender();
 
 drawTarget();freshLeg();renderPlayerSelectors(true);renderPlayersList();render();renderBoardFilters();renderLiveBoards();renderBoardPicker();setOrganizerUI();
