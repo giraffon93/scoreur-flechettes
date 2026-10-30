@@ -1302,7 +1302,9 @@ $('clearSaved').addEventListener('click',async()=>{
  setResultsMessage('Suppression des résultats en cours…');
  try{
   let query=supabase.from('dart_saved_results').delete().select('id');
-  if(filter!=='all')query=query.eq('board_number',Number(filter));
+  // Supabase exige un filtre WHERE explicite, même pour effacer toutes les cibles.
+  if(filter==='all')query=query.in('board_number',[1,2,3,4,5,6,7,8]);
+  else query=query.eq('board_number',Number(filter));
   const {data:deletedRows,error}=await query;
   if(error)throw error;
   const deletedCount=Array.isArray(deletedRows)?deletedRows.length:0;
