@@ -269,6 +269,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 <section class="panel">  <h2>Matchs enregistrés</h2>
   <div class="grid2" style="margin-bottom:10px"><label>Afficher les résultats de<select id="resultsBoardFilter"><option value="all">Toutes les cibles</option><option value="1">Cible 1</option><option value="2">Cible 2</option><option value="3">Cible 3</option><option value="4">Cible 4</option><option value="5">Cible 5</option><option value="6">Cible 6</option><option value="7">Cible 7</option><option value="8">Cible 8</option></select></label></div>
   <div class="actions"><button id="clearSaved" class="danger">Effacer les résultats affichés</button><button id="export">Exporter les résultats CSV</button></div>
+  <div id="resultsMessage" class="status" role="status" aria-live="polite">Les résultats sont synchronisés avec Supabase.</div>
   <p class="help">Les résultats de toutes les cibles sont regroupés ici. Sélectionne un match pour consulter ses volées.</p>
   <div id="savedMatches" class="list"></div>
   <div id="historyDetails" class="hidden" style="margin-top:18px"><h3>Volées du match sélectionné</h3><p class="help" id="historyMatchLabel">Volées du match choisi.</p><div id="history" class="list"></div></div>
@@ -730,22 +731,7 @@ if(supabase){
   loadBoardStates().then(()=>{loadPlayerRoster();loadSavedResults();startRealtime();});
   setInterval(loadBoardStates,15000);
   supabase.auth.getSession().then(async({data})=>{isOrganizer=!!data?.session;await refreshOrganizerPermissions();setOrganizerUI();});
-  supabase.auth.onAuthStateChange((_event,session)=>{
-    isOrganizer=!!session;
-    setOrganizerUI();
-    cloudMessage(isOrganizer?'Session organisateur active':'Lecture publique active · connexion requise pour modifier',true);
-    // Ne pas lancer d'appel Supabase await directement dans onAuthStateChange :
-    // le callback peut s'exécuter sous le verrou d'authentification.
-    setTimeout(async()=>{
-      await refreshOrganizerPermissions();
-      setOrganizerUI();
-      loadPlayerRoster();
-      loadSavedResults();
-      if(canManageMatches()&&activeBoard&&cloudReady)loadBoardStates();
-      if(canManageTournaments()&&tournamentTest?.name?.trim())schedulePublicTournamentSync();
-      if(organizerPermissions.is_admin)refreshOrganizerAdmin();
-    },0);
-  });
+  supabase.auth.onAuthStateChange(async(_event,session)=>{isOrganizer=!!session;await refreshOrganizerPermissions();setOrganizerUI();cloudMessage(isOrganizer?'Session organisateur active':'Lecture publique active · connexion requise pour modifier',true);loadPlayerRoster();loadSavedResults();if(canManageMatches()&&activeBoard&&cloudReady)loadBoardStates();if(canManageTournaments()&&tournamentTest?.name?.trim())schedulePublicTournamentSync();if(organizerPermissions.is_admin)refreshOrganizerAdmin();});
 }else cloudMessage('Impossible de charger Supabase.');
 $('loginButton').addEventListener('click',async()=>{
   if(!supabase){$('authStatus').textContent='Supabase ne se charge pas.';return;}
@@ -1303,22 +1289,41 @@ $('undo').addEventListener('click',undo);
 $('reset').addEventListener('click',()=>{if(!canManageMatches()){$('toast').textContent='Ton compte ne possède pas le droit de gérer les matchs 501.';return;}if(confirm('Réinitialiser le match en cours ?')){settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;freshLeg(state.legStarter);$('toast').textContent='Match réinitialisé.';render()}});
 $('resultsBoardFilter')?.addEventListener('change',()=>{selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSaved();const f=$('resultsBoardFilter').value;$('clearSaved').textContent=f==='all'?'Effacer les résultats de toutes les cibles':'Effacer les résultats de la cible '+f;});
 $('clearSaved').addEventListener('click',async()=>{
- if(!canManageResults()){$('toast').textContent='Permission Résultats requise.';return;}
+ const message=$('resultsMessage');
+ const setResultsMessage=(text,isError=false)=>{
+  if(message){message.textContent=text;message.style.color=isError?'#ff9b9b':'#f1d27c';}
+ };
+ if(!canManageResults()){setResultsMessage('Permission Résultats requise pour supprimer les résultats.',true);return;}
+ if(!supabase){setResultsMessage('Supabase indisponible : suppression en ligne impossible.',true);return;}
  const filter=$('resultsBoardFilter')?.value||'all';
  const description=filter==='all'?'tous les résultats de toutes les cibles':'tous les résultats de la cible '+filter;
  if(!confirm('Effacer '+description+' ? Cette action est définitive.'))return;
  const btn=$('clearSaved');btn.disabled=true;
+ setResultsMessage('Suppression des résultats en cours…');
  try{
-  let query=supabase.from('dart_saved_results').delete();
+  let query=supabase.from('dart_saved_results').delete().select('id');
   if(filter!=='all')query=query.eq('board_number',Number(filter));
-  const {error}=await query;
+  const {data:deletedRows,error}=await query;
   if(error)throw error;
-  if(filter==='all'){for(let n=1;n<=8;n++)try{localStorage.removeItem('dartsSavedMatches_board_'+n)}catch(e){} try{localStorage.removeItem('dartsSavedMatches_board_none')}catch(e){}}
-  else try{localStorage.removeItem('dartsSavedMatches_board_'+filter)}catch(e){}
-  await loadSavedResults();selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSaved();
-  $('toast').textContent='Résultats supprimés.';
- }catch(e){$('toast').textContent='Erreur pendant la suppression : '+(e?.message||e);}
- finally{btn.disabled=!canManageResults();}
+  const deletedCount=Array.isArray(deletedRows)?deletedRows.length:0;
+  if(filter==='all'){
+   for(let n=1;n<=8;n++)try{localStorage.removeItem('dartsSavedMatches_board_'+n)}catch(e){}
+   try{localStorage.removeItem('dartsSavedMatches_board_none')}catch(e){}
+  } else {
+   try{localStorage.removeItem('dartsSavedMatches_board_'+filter)}catch(e){}
+  }
+  await loadSavedResults();
+  selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSaved();
+  if(deletedCount===0 && cloudSavedResults.length){
+   setResultsMessage('Aucun résultat supprimé. Supabase a refusé la suppression : vérifie la politique RLS DELETE de dart_saved_results.',true);
+  } else {
+   setResultsMessage(deletedCount+' résultat(s) supprimé(s) de Supabase.');
+  }
+ }catch(e){
+  setResultsMessage('Erreur pendant la suppression : '+(e?.message||String(e)),true);
+ }finally{
+  btn.disabled=!canManageResults();
+ }
 });
 $('export').addEventListener('click',()=>{
  const saved=getFilteredSavedMatches();if(!saved.length){$('toast').textContent='Aucun résultat à exporter pour ce filtre.';return}
