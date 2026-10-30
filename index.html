@@ -38,7 +38,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .list{display:grid;gap:8px}.match-card,.history-row{border:1px solid var(--line);border-radius:9px;padding:10px;background:#141820}
 .match-card.current{border-color:var(--accent)}.match-head{display:flex;justify-content:space-between;gap:8px;align-items:center}.tag{font-size:11px;color:#161616;background:var(--accent);padding:4px 9px;border-radius:99px;white-space:nowrap;font-weight:800}
 .tag.status-live{background:#25b864;color:#071b0f;border:1px solid #49d982}
-.tag.status-free{background:#ffd45a;color:#211900;border:1px solid #ffe28a}
+.tag.status-free{background:#ffd45a;color:#211900;border:1px solid #ffe28a}\n.tag.status-prep{background:#f0a43a;color:#241500;border:1px solid #ffc46b}
 /* Tableau général compact : 4 colonnes x 2 lignes sur grand écran */
 #boardFilters{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px}
 #boardFilters label{display:flex;align-items:center;gap:5px;margin:0;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#141820;color:var(--text);font-size:13px}
@@ -154,8 +154,8 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 <nav aria-label="Menu principal">
 <button class="active" data-page="overviewPage">Vue des cibles</button><button class="organizer-only hidden" data-page="playersPage">Joueurs</button><button class="organizer-only hidden" data-page="boardSelectPage">Choisir une cible</button><button class="board-only hidden" data-page="setupPage">Préparation</button>
 <button class="board-only hidden" data-page="gamePage">Cible & score</button>
-<button class="organizer-only hidden" data-page="tournamentPage">Tournoi (TEST)</button><button id="adminNavButton" class="hidden" data-page="adminPage">Administration</button>
-<button data-page="resultsPage">Résultats</button><button data-page="publicTournamentPage">Tournoi</button>
+<button class="organizer-only hidden" data-page="tournamentPage">Tournoi</button>
+<button data-page="resultsPage">Résultats</button><button data-page="publicTournamentPage">Grille / classement</button><button id="adminNavButton" class="hidden" data-page="adminPage">Administration</button>
 </nav>
 <div class="board-pill" id="boardPill" style="display:none">Cible active : <strong id="activeBoardLabel">—</strong></div>
 </header>
@@ -252,7 +252,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
   <h2>Mode tournoi</h2>
   <p class="status">Le tournoi est préparé par l’organisateur. Chaque modification est synchronisée automatiquement en ligne pour que les visiteurs voient son évolution en temps réel. Le scoreur 501 et ses tables restent séparés.</p>
   <label>Nom du tournoi<input id="tournamentName" maxlength="80" placeholder="Ex. Tournoi du club"></label>
-  <div class="actions"><button id="tournamentCreate" class="primary" type="button">Créer / enregistrer le tournoi</button><button id="tournamentReset" class="danger" type="button">Réinitialiser le tournoi test</button></div>
+  <div class="actions"><button id="tournamentCreate" class="primary" type="button">Créer / enregistrer le tournoi</button><button id="tournamentReset" class="danger" type="button">Réinitialiser le tournoi</button></div>
   <div id="tournamentWorkspace" class="hidden">
     <h3 id="tournamentCurrentTitle">Matchs du tournoi</h3>
     <p class="help">Ajoute les matchs un par un, puis choisis les deux joueurs dans chaque match. Un joueur ne peut être sélectionné que dans un seul match du même tour. Les cibles restent libres.</p>
@@ -263,7 +263,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 </section>
 </div>
 <div id="publicTournamentPage" class="page">
-<section class="panel"><h2 id="publicTournamentTitle">Récapitulatif du tournoi</h2><p class="help">Vue publique en lecture seule. Les changements du tournoi apparaissent automatiquement au fil de son évolution.</p><div class="actions" style="margin-bottom:12px"><button id="publicTournamentRefresh" type="button">Actualiser</button></div><div id="publicTournamentStatus" class="status" role="status">Chargement du tournoi…</div><div id="publicTournamentSummary"></div><div id="publicTournamentRounds" class="public-tournament-rounds"></div><div id="publicTournamentPodium" class="list"></div></section>
+<section class="panel"><h2 id="publicTournamentTitle">Grille / classement</h2><p class="help">Vue publique en lecture seule. Les changements du tournoi apparaissent automatiquement au fil de son évolution.</p><div class="actions" style="margin-bottom:12px"><button id="publicTournamentRefresh" type="button">Actualiser</button></div><div id="publicTournamentStatus" class="status" role="status">Chargement du tournoi…</div><div id="publicTournamentSummary"></div><div id="publicTournamentRounds" class="public-tournament-rounds"></div><div id="publicTournamentPodium" class="list"></div></section>
 </div>
 <div id="resultsPage" class="page">
 <section class="panel">  <h2>Matchs enregistrés</h2>
@@ -346,7 +346,7 @@ const order = [20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
 const state = {
   names:['Joueur 1','Joueur 2'], start:501, doubleIn:false, doubleOut:true, format:'legs',
   scores:[501,501], active:0, darts:[], opened:[true,true], legs:[0,0], history:[],
-  saved:[], finished:false, winner:null, legNo:1, matchStarted:false, pendingLegWin:null, legStarter:0
+  saved:[], finished:false, winner:null, legNo:1, matchStarted:false, preparing:false, pendingLegWin:null, legStarter:0
 };
 // Connexion Supabase avec la clé publishable (jamais une clé secret/service_role).
 const SUPABASE_URL = 'https://irgsmmsnsxzbjgzjpaus.supabase.co';
@@ -550,7 +550,7 @@ function cloudMessage(msg, ok=false) {
 function snapshotForCloud() {
   return {names:[...state.names],start:state.start,doubleIn:state.doubleIn,doubleOut:state.doubleOut,format:state.format,customLegs:Number($('customLegs').value)||11,
     scores:[...state.scores],active:state.active,darts:state.darts,opened:[...state.opened],legs:[...state.legs],history:state.history,
-    finished:state.finished,winner:state.winner,legNo:state.legNo,legStarter:state.legStarter,matchStarted:state.matchStarted,resultSaved:!!state.resultSaved,players:[]};
+    finished:state.finished,winner:state.winner,legNo:state.legNo,legStarter:state.legStarter,matchStarted:state.matchStarted,preparing:!!state.preparing,resultSaved:!!state.resultSaved,players:[]};
 }
 function applyCloudSnapshot(data, remoteUpdatedAt=null, boardNumber=activeBoard) {
   if (!data || typeof data !== 'object' || !Array.isArray(data.names)) return;
@@ -573,12 +573,12 @@ function applyCloudSnapshot(data, remoteUpdatedAt=null, boardNumber=activeBoard)
     state.active=Number(data.active)||0; state.darts=Array.isArray(data.darts)?data.darts:[];
     state.opened=Array.isArray(data.opened)?data.opened:[true,true]; state.legs=Array.isArray(data.legs)?data.legs:[0,0];
     state.history=Array.isArray(data.history)?data.history:[]; state.finished=!!data.finished; state.winner=data.winner||null;
-    state.legNo=Number(data.legNo)||1; state.legStarter=Number(data.legStarter)===1?1:0; state.matchStarted=!!data.matchStarted; state.resultSaved=!!data.resultSaved;
+    state.legNo=Number(data.legNo)||1; state.legStarter=Number(data.legStarter)===1?1:0; state.matchStarted=!!data.matchStarted; state.preparing=!!data.preparing&&!state.matchStarted&&!state.finished; state.resultSaved=!!data.resultSaved;
     // Ne pas écraser les champs de préparation pendant que l'organisateur les modifie.
     // Les mises à jour temps réel de Supabase peuvent arriver pendant la saisie.
     if (!setupFormDirty) {
       // Les anciens noms d'un match terminé ne sont pas présélectionnés pour le prochain match.
-      if (state.matchStarted && !state.finished) {
+      if ((state.matchStarted && !state.finished) || state.preparing) {
         renderPlayerSelectors(false);
         $('p1').value=playerRoster.includes(state.names[0])?state.names[0]:'';
         $('p2').value=playerRoster.includes(state.names[1])?state.names[1]:'';
@@ -633,6 +633,10 @@ async function openBoard(n){
     saveTimer=null;
     await saveBoardState(activeBoard,snapshotForCloud());
   }
+  if(activeBoard && String(activeBoard)!==String(n) && state.preparing && !state.matchStarted){
+    state.preparing=false;
+    await saveBoardState(activeBoard,snapshotForCloud());
+  }
   setupFormDirty = false;
   localMatchStartLockUntil = 0;
   if(!boardNames[selected] || !canManageMatches()) return;
@@ -650,17 +654,19 @@ async function openBoard(n){
   if(latestRow) remoteBoards[selected]=latestRow;
   const existing=latestRow?.match_state||{};
   const inProgress=!!existing.matchStarted&&!existing.finished;
+  const inPreparation=!!existing.preparing&&!inProgress;
 
-  // Une cible libre s'ouvre sans code. Le code n'est demandé que pour reprendre
-  // un match déjà en cours depuis un autre appareil.
-  if(inProgress){
+  // Une cible en préparation ou en cours est réservée à son appareil.
+  // Un autre appareil doit saisir le code de cette cible pour la rejoindre.
+  if(inProgress||inPreparation){
     const {data:hosts,error:hostError}=await supabase.rpc('get_dart_board_host_status',{p_device_id:dartDeviceId});
     if(hostError){alert('Impossible de vérifier le verrouillage de cette cible : '+hostError.message);return;}
     const host=(hosts||[]).find(x=>Number(x.board_number)===Number(n));
     if(!host || !host.is_mine){
-      const code=prompt('Un match est en cours sur la cible '+n+'. Entre le code de cette cible pour reprendre le match :');
+      const phase=inProgress?'un match est en cours':'une préparation est en cours';
+      const code=prompt('La cible '+n+' est réservée : '+phase+'. Entre le code de cette cible pour la rejoindre :');
       if(code===null)return;
-      if(!code.trim()){alert('Code obligatoire pour reprendre un match en cours.');return;}
+      if(!code.trim()){alert('Code obligatoire pour rejoindre une cible réservée.');return;}
       const {error:authError}=await supabase.rpc('authorize_dart_board',{
         p_board_number:Number(n),p_device_id:dartDeviceId,p_code:code.trim()
       });
@@ -679,15 +685,30 @@ async function openBoard(n){
   else {
     state.names=['Joueur 1','Joueur 2']; state.start=501; state.doubleIn=false; state.doubleOut=true; state.format='3';
     state.scores=[501,501]; state.active=0; state.darts=[]; state.opened=[true,true]; state.legs=[0,0]; state.history=[];
-    state.finished=false; state.winner=null; state.legNo=1; state.matchStarted=false; state.pendingLegWin=null; state.turnSnapshot=null; state.legStarter=0;
+    state.finished=false; state.winner=null; state.legNo=1; state.matchStarted=false; state.preparing=false; state.pendingLegWin=null; state.turnSnapshot=null; state.legStarter=0;
     $('p1').value='Joueur 1'; $('p2').value='Joueur 2'; $('start').value='501'; $('doubleIn').value='no'; $('doubleOut').value='yes'; $('format').value='3';
     render();
+  }
+  // Une cible libre devient réservée dès l'entrée dans les réglages.
+  if(!inProgress){
+    state.preparing=true;
+    clearTimeout(saveTimer);
+    saveTimer=null;
+    const reserved=await saveBoardState(activeBoard,snapshotForCloud());
+    if(reserved===false){
+      state.preparing=false;
+      activeBoard='';
+      updateBoardNav();
+      showPage('boardSelectPage');
+      alert('Impossible de réserver cette cible. Vérifie la connexion puis réessaie.');
+      return;
+    }
   }
   // Ne jamais conserver les joueurs de la cible précédemment ouverte.
   // On restaure les noms uniquement pour reprendre un match effectivement en cours sur cette cible.
   setupFormDirty=false;
   renderPlayerSelectors(false);
-  if(inProgress && Array.isArray(existing.names)){
+  if((inProgress||inPreparation) && Array.isArray(existing.names)){
     $('p1').value=playerRoster.includes(existing.names[0])?existing.names[0]:'';
     $('p2').value=playerRoster.includes(existing.names[1])?existing.names[1]:'';
   }else{
@@ -705,12 +726,13 @@ function renderLiveBoards() {
   const el=$('liveBoards'); if(!el)return; el.innerHTML=''; const selected=getSelectedOverviewBoards();
   if(!selected.length){el.innerHTML='<div class="muted">Aucune cible sélectionnée. Coche une ou plusieurs cibles ci-dessus.</div>';renderBoardFilters();return;}
   for(const n of selected){
-    const row=remoteBoards[String(n)],d=row?.match_state||{},inProgress=!!d.matchStarted&&!d.finished;
-    const status=inProgress?`En cours · ${d.scores?.[0]??'—'} – ${d.scores?.[1]??'—'}`:'Cible disponible pour un nouveau match';
-    // N'afficher les noms que si la cible a réellement un match en cours.
-    const names=inProgress&&Array.isArray(d.names)?d.names:['—','—'];
-    const card=document.createElement('div');card.className='match-card'+(inProgress?' current':'');
-    card.innerHTML=`<div class="match-head"><strong>Cible ${n} · ${escapeHtml(names[0])} / ${escapeHtml(names[1])}</strong><span class="tag ${inProgress?'status-live':'status-free'}">${inProgress?'EN COURS':'LIBRE'}</span></div><div>${escapeHtml(status)}</div><div class="muted">${d.legs?`Manches : ${d.legs[0]||0} – ${d.legs[1]||0}`:''}${row?.updated_at?' · Mis à jour : '+new Date(row.updated_at).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):''}</div>`;
+    const row=remoteBoards[String(n)],d=row?.match_state||{},inProgress=!!d.matchStarted&&!d.finished,preparing=!!d.preparing&&!inProgress;
+    const status=inProgress?`En cours · ${d.scores?.[0]??'—'} – ${d.scores?.[1]??'—'}`:preparing?'Préparation en cours':'Cible disponible pour un nouveau match';
+    const names=(inProgress||preparing)&&Array.isArray(d.names)?d.names:['—','—'];
+    const badgeClass=inProgress?'status-live':preparing?'status-prep':'status-free';
+    const badgeText=inProgress?'EN COURS':preparing?'PRÉPARATION':'LIBRE';
+    const card=document.createElement('div');card.className='match-card'+(inProgress?' current':preparing?'':'');
+    card.innerHTML=`<div class="match-head"><strong>Cible ${n} · ${escapeHtml(names[0])} / ${escapeHtml(names[1])}</strong><span class="tag ${badgeClass}">${badgeText}</span></div><div>${escapeHtml(status)}</div><div class="muted">${d.legs?`Manches : ${d.legs[0]||0} – ${d.legs[1]||0}`:''}${row?.updated_at?' · Mis à jour : '+new Date(row.updated_at).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):''}</div>`;
     el.appendChild(card);
   }
   renderBoardFilters();
@@ -718,29 +740,30 @@ function renderLiveBoards() {
 function renderBoardPicker(){
   const el=$('boardPickerGrid'); if(!el)return; el.innerHTML='';
   for(let n=1;n<=8;n++){
-    const row=remoteBoards[String(n)],d=row?.match_state||{},inProgress=!!d.matchStarted&&!d.finished;
-    const status=inProgress?`EN COURS · ${d.scores?.[0]??'—'} – ${d.scores?.[1]??'—'}`:'LIBRE';
-    // Les anciens noms ne doivent pas rester visibles quand la cible est libre.
-    const names=inProgress&&Array.isArray(d.names)?d.names:['Aucun match',''];
-    const playerLabel=inProgress?`${escapeHtml(names[0])} / ${escapeHtml(names[1])}`:'Prête pour un nouveau match';
-    const btn=document.createElement('button');btn.type='button';btn.innerHTML=`<strong>Cible ${n}${String(n)===String(activeBoard)?' · Sélectionnée':''}</strong><span class="tag ${inProgress?'status-live':'status-free'}" style="display:inline-block;margin:2px 0 6px">${escapeHtml(status)}</span><span class="board-player-names">${playerLabel}</span>`;
-    if(inProgress)btn.style.borderColor='#25b864';
+    const row=remoteBoards[String(n)],d=row?.match_state||{},inProgress=!!d.matchStarted&&!d.finished,preparing=!!d.preparing&&!inProgress;
+    const status=inProgress?`EN COURS · ${d.scores?.[0]??'—'} – ${d.scores?.[1]??'—'}`:preparing?'EN PRÉPARATION':'LIBRE';
+    const names=(inProgress||preparing)&&Array.isArray(d.names)?d.names:['Aucun match',''];
+    const playerLabel=(inProgress||preparing)?`${escapeHtml(names[0]||'Joueurs à choisir')} / ${escapeHtml(names[1]||'')}`:'Prête pour un nouveau match';
+    const badgeClass=inProgress?'status-live':preparing?'status-prep':'status-free';
+    const btn=document.createElement('button');btn.type='button';btn.innerHTML=`<strong>Cible ${n}${String(n)===String(activeBoard)?' · Sélectionnée':''}</strong><span class="tag ${badgeClass}" style="display:inline-block;margin:2px 0 6px">${escapeHtml(status)}</span><span class="board-player-names">${playerLabel}</span>`;
+    if(inProgress)btn.style.borderColor='#25b864';else if(preparing)btn.style.borderColor='#f0a43a';
     btn.addEventListener('click',()=>openBoard(n));el.appendChild(btn);
   }
 }
 async function saveBoardState(boardNumber=activeBoard, snapshot=snapshotForCloud()) {
   const boardKey=String(boardNumber||'');
-  if(!supabase||!boardKey||applyingRemote||!cloudReady||!canManageMatches())return;
+  if(!supabase||!boardKey||applyingRemote||!cloudReady||!canManageMatches())return false;
   const {data,error}=await supabase.rpc('save_dart_board_state',{
     p_board_number:Number(boardKey),p_device_id:dartDeviceId,p_match_state:snapshot
   });
   if(error){
     cloudMessage('Écriture refusée par Supabase : '+error.message);
-    return;
+    return false;
   }
   const row=remoteBoards[boardKey];
   remoteBoards[boardKey]={...(row||{}),board_number:Number(boardKey),match_state:data?.match_state||snapshot,updated_at:data?.updated_at||new Date().toISOString()};
   renderLiveBoards();renderBoardPicker();
+  return true;
 }
 function queueCloudSave(){
   if(applyingRemote||!activeBoard||!cloudReady||!canManageMatches())return;
@@ -831,7 +854,7 @@ async function startMatch(starter){
  // Lire les champs saisis au tout dernier moment, avant toute synchronisation.
  settingsFromForm();
  state.customLegs=Number($('customLegs').value)||11;
- state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;state.finished=false;state.winner=null;state.resultSaved=false;
+ state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;state.preparing=false;state.finished=false;state.winner=null;state.resultSaved=false;
  freshLeg(starter);
  localMatchStartLockUntil=Date.now()+6000;
  setupFormDirty=false;
@@ -845,6 +868,7 @@ async function startMatch(starter){
    });
    if(error){
      state.matchStarted=false;
+     state.preparing=true;
      $('toast').textContent='Impossible de démarrer le match : '+error.message+' (vérifie que le SQL de démarrage sans code a été appliqué dans Supabase).';
      render();return;
    }
@@ -854,6 +878,7 @@ async function startMatch(starter){
    $('toast').textContent='Nouveau match enregistré et cible verrouillée. '+state.names[starter]+' commence après le bull.';
  } catch(e) {
    state.matchStarted=false;
+   state.preparing=true;
    $('toast').textContent='Échec de la sauvegarde en ligne : '+(e?.message||'erreur inconnue');
    render();return;
  }
@@ -1008,6 +1033,7 @@ async function saveFinishedResult(){
 }
 async function releaseBoardAndReturnToSetup(message){
   state.matchStarted=false;
+  state.preparing=false;
   state.scores=[state.start,state.start];state.active=0;state.darts=[];state.opened=[!state.doubleIn,!state.doubleIn];
   state.pendingLegWin=null;state.turnSnapshot=null;
   $('toast').textContent=message;
@@ -1281,7 +1307,7 @@ $('format').addEventListener('change',()=>{
  setupFormDirty=true;
  $('customLegsLabel').classList.toggle('hidden',$('format').value!=='custom');
 });
-['p1','p2','start','doubleIn','doubleOut','format','customLegs'].forEach(id=>$(id).addEventListener('change',()=>{setupFormDirty=true;}));
+['p1','p2','start','doubleIn','doubleOut','format','customLegs'].forEach(id=>$(id).addEventListener('change',()=>{setupFormDirty=true;if(activeBoard&&state.preparing&&!state.matchStarted){settingsFromForm();queueCloudSave();}}));
 $('p1').addEventListener('change',updatePlayerSelectOptions);$('p2').addEventListener('change',updatePlayerSelectOptions);
 $('addPlayer').addEventListener('click',addPlayer);$('newPlayerName').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addPlayer();}});
 $('newPlayerName').addEventListener('input',()=>{if(!canManagePlayers())$('playersMessage').textContent='Permission Joueurs requise pour modifier la liste.';});
@@ -1305,6 +1331,7 @@ $('finishMatch').addEventListener('click',async()=>{
   }
   await saveFinishedResult();
   state.matchStarted=false;
+  state.preparing=false;
   state.scores=[state.start,state.start];state.active=0;state.darts=[];state.opened=[!state.doubleIn,!state.doubleIn];state.pendingLegWin=null;state.turnSnapshot=null;
   $('toast').textContent='Résultat enregistré ('+state.legs[0]+'–'+state.legs[1]+'). Cible libérée, prête pour un nouveau match.';
   $('p1').value='';$('p2').value='';setupFormDirty=false;updatePlayerSelectOptions();
