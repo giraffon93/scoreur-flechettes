@@ -376,8 +376,7 @@ const canManagePlayers=()=>isOrganizer&&organizerPermissions.is_active&&(organiz
 const canManageTournaments=()=>isOrganizer&&organizerPermissions.is_active&&(organizerPermissions.is_admin||organizerPermissions.can_manage_tournaments);
 const canManageResults=()=>isOrganizer&&organizerPermissions.is_active&&(organizerPermissions.is_admin||organizerPermissions.can_manage_results);
 const canAccessSettings=()=>isOrganizer&&organizerPermissions.is_active&&(organizerPermissions.is_admin||organizerPermissions.can_access_settings);
-const lastLocalEditAtByBoard = {};
-const lastAppliedRemoteAtByBoard = {};
+const lastLocalEditAtByBoard = Object.create(null); const lastAppliedRemoteAtByBoard = Object.create(null);
 let setupFormDirty = false;
 let localMatchStartLockUntil = 0;
 let remoteBoards = {};
@@ -560,12 +559,13 @@ function applyCloudSnapshot(data, remoteUpdatedAt=null, boardNumber=activeBoard)
   if (isOrganizer && setupFormDirty && currentPage === 'setupPage') return;
   // Après le démarrage, laisse le temps à l'écriture locale d'être enregistrée dans Supabase.
   if (Date.now() < localMatchStartLockUntil) return;
+  const boardKey = String(boardNumber || activeBoard || '');
   const remoteTime = remoteUpdatedAt ? Date.parse(remoteUpdatedAt) : 0;
-  // Ignore snapshots fetched before the most recent local action; otherwise a slow poll
-  // or realtime echo can undo a dart/action the organizer just entered.
-  if (remoteTime && remoteTime < lastLocalEditAt) return;
-  if (remoteTime && remoteTime < lastAppliedRemoteAt) return;
-  if (remoteTime) lastAppliedRemoteAt = remoteTime;
+  // Les horodatages sont indépendants : une mise à jour récente de la cible 3
+  // ne doit jamais empêcher le chargement de la cible 1.
+  if (remoteTime && remoteTime < (lastLocalEditAtByBoard[boardKey] || 0)) return;
+  if (remoteTime && remoteTime < (lastAppliedRemoteAtByBoard[boardKey] || 0)) return;
+  if (remoteTime) lastAppliedRemoteAtByBoard[boardKey] = remoteTime;
   applyingRemote = true;
   try {
     state.names=data.names; state.start=Number(data.start)||501; state.doubleIn=!!data.doubleIn; state.doubleOut=!!data.doubleOut;
@@ -627,7 +627,7 @@ $('selectAllBoards')?.addEventListener('click',()=>setSelectedOverviewBoards([1,
 $('selectNoBoards')?.addEventListener('click',()=>setSelectedOverviewBoards([]));
 async function openBoard(n){
   const selected=String(n);
-  // Sauvegarder toute modification en attente sur l'ancienne cible avant de changer.
+  // Une sauvegarde différée appartient à l'ancienne cible : on la termine avant le changement.
   if(saveTimer && activeBoard){
     clearTimeout(saveTimer);
     saveTimer=null;
@@ -748,8 +748,6 @@ function queueCloudSave(){
   const snapshot=snapshotForCloud();
   lastLocalEditAtByBoard[boardKey]=Date.now();
   clearTimeout(saveTimer);
-  // Capturer la cible et son état maintenant : ne jamais utiliser la cible active
-  // au moment où le délai de sauvegarde se déclenche.
   saveTimer=setTimeout(()=>saveBoardState(boardKey,snapshot),300);
 }
 function startRealtime(){
@@ -1300,11 +1298,11 @@ $('finishMatch').addEventListener('click',async()=>{
  if(confirm('Terminer ce match et libérer la cible ? Le résultat sera conservé dans la liste des résultats.')){
   clearTimeout(saveTimer);
   saveTimer=null;
+  const finishingBoard=String(activeBoard);
   if(!state.finished){
    state.finished=true;
    state.winner=state.legs[0]===state.legs[1]?null:(state.legs[0]>state.legs[1]?state.names[0]:state.names[1]);
   }
-  const finishingBoard=String(activeBoard);
   await saveFinishedResult();
   state.matchStarted=false;
   state.scores=[state.start,state.start];state.active=0;state.darts=[];state.opened=[!state.doubleIn,!state.doubleIn];state.pendingLegWin=null;state.turnSnapshot=null;
