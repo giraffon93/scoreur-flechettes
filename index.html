@@ -376,8 +376,8 @@ const canManagePlayers=()=>isOrganizer&&organizerPermissions.is_active&&(organiz
 const canManageTournaments=()=>isOrganizer&&organizerPermissions.is_active&&(organizerPermissions.is_admin||organizerPermissions.can_manage_tournaments);
 const canManageResults=()=>isOrganizer&&organizerPermissions.is_active&&(organizerPermissions.is_admin||organizerPermissions.can_manage_results);
 const canAccessSettings=()=>isOrganizer&&organizerPermissions.is_active&&(organizerPermissions.is_admin||organizerPermissions.can_access_settings);
-let lastLocalEditAt = 0;
-let lastAppliedRemoteAt = 0;
+const lastLocalEditAtByBoard = {};
+const lastAppliedRemoteAtByBoard = {};
 let setupFormDirty = false;
 let localMatchStartLockUntil = 0;
 let remoteBoards = {};
@@ -553,7 +553,7 @@ function snapshotForCloud() {
     scores:[...state.scores],active:state.active,darts:state.darts,opened:[...state.opened],legs:[...state.legs],history:state.history,
     finished:state.finished,winner:state.winner,legNo:state.legNo,legStarter:state.legStarter,matchStarted:state.matchStarted,resultSaved:!!state.resultSaved,players:[]};
 }
-function applyCloudSnapshot(data, remoteUpdatedAt=null) {
+function applyCloudSnapshot(data, remoteUpdatedAt=null, boardNumber=activeBoard) {
   if (!data || typeof data !== 'object' || !Array.isArray(data.names)) return;
   const currentPage = document.querySelector('.page.active')?.id;
   // Ne jamais réappliquer les anciens paramètres cloud pendant que l'organisateur prépare un match.
@@ -605,7 +605,7 @@ async function loadBoardStates() {
   // est vide (players: []) et appartient aux données d'une cible, pas au roster.
   renderPlayerSelectors(true);renderPlayersList();
   renderLiveBoards(); renderBoardPicker(); renderSaved(); cloudReady=true;
-  if(activeBoard && remoteBoards[String(activeBoard)]?.match_state?.names) applyCloudSnapshot(remoteBoards[String(activeBoard)].match_state, remoteBoards[String(activeBoard)].updated_at);
+  if(activeBoard && remoteBoards[String(activeBoard)]?.match_state?.names) applyCloudSnapshot(remoteBoards[String(activeBoard)].match_state, remoteBoards[String(activeBoard)].updated_at, activeBoard);
   cloudMessage('Connecté à Supabase · lecture en direct activée',true);
 }
 const BOARD_FILTER_KEY='dartsOverviewSelectedBoards';
@@ -627,6 +627,12 @@ $('selectAllBoards')?.addEventListener('click',()=>setSelectedOverviewBoards([1,
 $('selectNoBoards')?.addEventListener('click',()=>setSelectedOverviewBoards([]));
 async function openBoard(n){
   const selected=String(n);
+  // Sauvegarder toute modification en attente sur l'ancienne cible avant de changer.
+  if(saveTimer && activeBoard){
+    clearTimeout(saveTimer);
+    saveTimer=null;
+    await saveBoardState(activeBoard,snapshotForCloud());
+  }
   setupFormDirty = false;
   localMatchStartLockUntil = 0;
   if(!boardNames[selected] || !canManageMatches()) return;
@@ -669,7 +675,7 @@ async function openBoard(n){
   updateBoardNav();
   showApp();
   const row=remoteBoards[String(activeBoard)];
-  if(row?.match_state?.names) applyCloudSnapshot(row.match_state,row.updated_at);
+  if(row?.match_state?.names) applyCloudSnapshot(row.match_state,row.updated_at,activeBoard);
   else {
     state.names=['Joueur 1','Joueur 2']; state.start=501; state.doubleIn=false; state.doubleOut=true; state.format='3';
     state.scores=[501,501]; state.active=0; state.darts=[]; state.opened=[true,true]; state.legs=[0,0]; state.history=[];
@@ -722,26 +728,35 @@ function renderBoardPicker(){
     btn.addEventListener('click',()=>openBoard(n));el.appendChild(btn);
   }
 }
-async function saveBoardState() {
-  if(!supabase||!activeBoard||applyingRemote||!cloudReady||!canManageMatches())return;
-  const snapshot=snapshotForCloud();
+async function saveBoardState(boardNumber=activeBoard, snapshot=snapshotForCloud()) {
+  const boardKey=String(boardNumber||'');
+  if(!supabase||!boardKey||applyingRemote||!cloudReady||!canManageMatches())return;
   const {data,error}=await supabase.rpc('save_dart_board_state',{
-    p_board_number:Number(activeBoard),p_device_id:dartDeviceId,p_match_state:snapshot
+    p_board_number:Number(boardKey),p_device_id:dartDeviceId,p_match_state:snapshot
   });
   if(error){
     cloudMessage('Écriture refusée par Supabase : '+error.message);
     return;
   }
-  const row=remoteBoards[String(activeBoard)];
-  remoteBoards[String(activeBoard)]={...(row||{}),board_number:Number(activeBoard),match_state:data?.match_state||snapshot,updated_at:data?.updated_at||new Date().toISOString()};
+  const row=remoteBoards[boardKey];
+  remoteBoards[boardKey]={...(row||{}),board_number:Number(boardKey),match_state:data?.match_state||snapshot,updated_at:data?.updated_at||new Date().toISOString()};
   renderLiveBoards();renderBoardPicker();
 }
-function queueCloudSave(){if(applyingRemote||!activeBoard||!cloudReady||!canManageMatches())return;lastLocalEditAt=Date.now();clearTimeout(saveTimer);saveTimer=setTimeout(saveBoardState,300);}
+function queueCloudSave(){
+  if(applyingRemote||!activeBoard||!cloudReady||!canManageMatches())return;
+  const boardKey=String(activeBoard);
+  const snapshot=snapshotForCloud();
+  lastLocalEditAtByBoard[boardKey]=Date.now();
+  clearTimeout(saveTimer);
+  // Capturer la cible et son état maintenant : ne jamais utiliser la cible active
+  // au moment où le délai de sauvegarde se déclenche.
+  saveTimer=setTimeout(()=>saveBoardState(boardKey,snapshot),300);
+}
 function startRealtime(){
   if(!supabase)return; if(channel)supabase.removeChannel(channel);
   channel=supabase.channel('dart-boards-live').on('postgres_changes',{event:'*',schema:'public',table:'dart_boards'},payload=>{
     const row=payload.new;if(!row?.board_number)return; remoteBoards[String(row.board_number)]=row;updatePlayerSelectOptions();renderLiveBoards();renderBoardPicker();renderSaved();
-    if(String(row.board_number)===String(activeBoard)&&row.match_state?.names&&!applyingRemote)applyCloudSnapshot(row.match_state,row.updated_at);
+    if(String(row.board_number)===String(activeBoard)&&row.match_state?.names&&!applyingRemote)applyCloudSnapshot(row.match_state,row.updated_at,activeBoard);
   }).on('postgres_changes',{event:'*',schema:'public',table:'dart_players'},()=>loadPlayerRoster()).on('postgres_changes',{event:'*',schema:'public',table:'dart_saved_results'},()=>loadSavedResults()).subscribe(status=>{if(status==='SUBSCRIBED')cloudMessage('Connecté à Supabase · mises à jour en direct',true);});
 }
 if(supabase){
@@ -1283,17 +1298,20 @@ $('finishMatch').addEventListener('click',async()=>{
  if(!state.matchStarted){$('toast').textContent='Aucun match à terminer.';return;}
  if(state.finished){$('toast').textContent='Le match est déjà terminé.';return;}
  if(confirm('Terminer ce match et libérer la cible ? Le résultat sera conservé dans la liste des résultats.')){
+  clearTimeout(saveTimer);
+  saveTimer=null;
   if(!state.finished){
    state.finished=true;
    state.winner=state.legs[0]===state.legs[1]?null:(state.legs[0]>state.legs[1]?state.names[0]:state.names[1]);
   }
+  const finishingBoard=String(activeBoard);
   await saveFinishedResult();
   state.matchStarted=false;
   state.scores=[state.start,state.start];state.active=0;state.darts=[];state.opened=[!state.doubleIn,!state.doubleIn];state.pendingLegWin=null;state.turnSnapshot=null;
   $('toast').textContent='Résultat enregistré ('+state.legs[0]+'–'+state.legs[1]+'). Cible libérée, prête pour un nouveau match.';
   $('p1').value='';$('p2').value='';setupFormDirty=false;updatePlayerSelectOptions();
   render();
-  await saveBoardState();
+  await saveBoardState(finishingBoard,snapshotForCloud());
   // Après l’enregistrement du résultat, revenir au sélecteur et désélectionner la cible.
   activeBoard='';
   try{sessionStorage.removeItem('dartsActiveBoard')}catch(e){}
