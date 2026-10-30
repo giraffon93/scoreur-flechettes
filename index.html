@@ -631,6 +631,12 @@ async function openBoard(n){
   localMatchStartLockUntil = 0;
   if(!boardNames[selected] || !canManageMatches()) return;
 
+  // Chaque changement de cible repart d'une préparation vierge.
+  // Les noms ne seront restaurés que si cette cible possède réellement un match en cours.
+  $('p1').value='';
+  $('p2').value='';
+  updatePlayerSelectOptions();
+
   // Rafraîchir le statut pour décider à partir de l'état réel de Supabase.
   if(!supabase || !cloudReady){alert('Connexion Supabase pas encore prête. Réessaie dans quelques secondes.');return;}
   const {data:latestRow,error:readError}=await supabase.from('dart_boards').select('board_number,match_state,updated_at').eq('board_number',Number(n)).maybeSingle();
@@ -671,7 +677,18 @@ async function openBoard(n){
     $('p1').value='Joueur 1'; $('p2').value='Joueur 2'; $('start').value='501'; $('doubleIn').value='no'; $('doubleOut').value='yes'; $('format').value='3';
     render();
   }
-  if(!state.matchStarted || state.finished){$('p1').value='';$('p2').value='';setupFormDirty=false;updatePlayerSelectOptions();}
+  // Ne jamais conserver les joueurs de la cible précédemment ouverte.
+  // On restaure les noms uniquement pour reprendre un match effectivement en cours sur cette cible.
+  setupFormDirty=false;
+  renderPlayerSelectors(false);
+  if(inProgress && Array.isArray(existing.names)){
+    $('p1').value=playerRoster.includes(existing.names[0])?existing.names[0]:'';
+    $('p2').value=playerRoster.includes(existing.names[1])?existing.names[1]:'';
+  }else{
+    $('p1').value='';
+    $('p2').value='';
+  }
+  updatePlayerSelectOptions();
   renderSaved();
   // Si un match est en cours, aller directement au score sans réinitialiser quoi que ce soit.
   showPage(inProgress ? 'gamePage' : 'setupPage');
