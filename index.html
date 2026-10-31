@@ -122,6 +122,134 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 .public-tournament-rounds{display:flex;gap:18px;overflow-x:auto;padding:10px 2px 16px;align-items:stretch}.public-tournament-round{width:220px;flex:0 0 220px}.public-tournament-match{border:1px solid var(--line);background:#141820;border-radius:9px;padding:10px;margin:0 0 12px}.public-tournament-match .public-player{padding:7px 8px;border:1px solid #303946;background:#1b222c;border-radius:7px;margin-top:5px;overflow-wrap:anywhere}.public-tournament-match .public-player.winner{border-color:#3d9b69;background:#163124;color:#d8ffe7}.public-tournament-match .public-status{font-size:11px;color:var(--muted);margin-top:8px}
 @media(max-width:600px){.bracket{gap:18px}.bracket-round{width:205px;flex-basis:205px}}
 
+
+/* --- Finition visuelle : surcouche CSS uniquement --- */
+:root{
+  --bg:#0c1118;
+  --panel:#171f2a;
+  --line:#303d4d;
+  --text:#f4f7fb;
+  --muted:#aab6c5;
+  --accent:#efc45b;
+  --red:#d71920;
+  --green:#159653;
+}
+body{
+  background:
+    radial-gradient(ellipse at 50% -18%,rgba(239,196,91,.10),transparent 42%),
+    var(--bg);
+  letter-spacing:.01em;
+}
+header{
+  background:rgba(18,25,35,.96);
+  border-bottom:1px solid #354254;
+  box-shadow:0 8px 28px rgba(0,0,0,.18);
+  padding:20px clamp(14px,3vw,30px);
+}
+header h1{
+  letter-spacing:.025em;
+  font-weight:800;
+}
+header p{font-size:14px}
+main{padding:clamp(12px,2.2vw,24px)}
+.panel{
+  background:linear-gradient(155deg,rgba(29,39,53,.98),rgba(21,29,40,.98));
+  border-color:#344254;
+  border-radius:16px;
+  box-shadow:0 10px 28px rgba(0,0,0,.16);
+  padding:clamp(14px,2vw,20px);
+}
+h2{
+  font-size:clamp(17px,2vw,20px);
+  letter-spacing:.01em;
+  padding-bottom:9px;
+  border-bottom:1px solid rgba(170,182,197,.14);
+}
+h3{font-weight:750}
+input,select,button{
+  min-height:42px;
+  border-color:#46566a;
+  background:#101722;
+  transition:border-color .16s ease,background .16s ease,transform .16s ease,filter .16s ease;
+}
+input:focus,select:focus,button:focus-visible{
+  outline:2px solid rgba(239,196,91,.78);
+  outline-offset:2px;
+  border-color:var(--accent);
+}
+button{
+  border-radius:10px;
+  background:linear-gradient(180deg,#303c4d,#253142);
+}
+button:hover:not(:disabled){filter:brightness(1.12);transform:translateY(-1px)}
+button.primary{
+  background:linear-gradient(180deg,#f4d477,#e5b94d);
+  color:#171717;
+  box-shadow:0 3px 10px rgba(229,185,77,.16);
+}
+button.danger{background:linear-gradient(180deg,#663238,#4c252b)}
+nav{gap:9px}
+nav button{
+  border-radius:10px;
+  min-height:40px;
+  padding:9px 15px;
+  background:#202b39;
+}
+nav button.active{
+  background:var(--accent);
+  box-shadow:0 3px 12px rgba(229,185,77,.18);
+}
+.status{
+  border-radius:10px;
+  background:rgba(10,15,22,.62);
+  border-color:#354254;
+  padding:10px 12px;
+}
+.match-card,.history-row,.player,.dart,.bracket-match,.public-tournament-match{
+  border-color:#354254;
+  border-radius:11px;
+}
+.player{background:#121a25}
+.player.active{box-shadow:0 0 0 1px var(--accent) inset,0 0 18px rgba(239,196,91,.08)}
+.match-card.current{box-shadow:0 0 0 1px rgba(239,196,91,.16)}
+.tag{letter-spacing:.035em}
+.tag.status-prep{background:#e53935;color:#080808;border-color:#ff7773}
+.tag.status-free{background:#ffd45a;color:#211900}
+.tag.status-live{background:#25b864;color:#071b0f}
+.board-picker-grid button{
+  border-radius:12px;
+  padding:13px;
+  min-height:96px;
+}
+.board-picker-grid button strong{font-size:16px}
+#liveBoards .match-card{background:#141d29}
+#authControls button{min-height:42px}
+.access-card{
+  background:linear-gradient(155deg,#202b39,#151c26);
+  border-color:#3b4a5e;
+}
+.access-card button{min-height:46px}
+.bracket-round-title{letter-spacing:.09em}
+.bracket-match{background:#141d29}
+.bracket-player{background:#1b2735}
+#toast{font-weight:650}
+@media(max-width:850px){
+  header{padding:16px 14px}
+  nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  nav button{width:100%;min-width:0}
+  .panel{padding:14px}
+}
+@media(max-width:520px){
+  body{font-size:14px}
+  .grid2{gap:8px}
+  .actions{gap:7px}
+  .actions button{min-height:44px}
+  .board-picker-grid button{min-height:90px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;transition:none!important}
+}
+
 </style>
 </head>
 <body>
@@ -216,7 +344,7 @@ main{max-width:1300px;margin:auto;padding:18px;display:block}
 <li>Choisis le format du match et clique sur « Démarrer / nouveau match ».</li>
 <li>Le score s’ouvre automatiquement après le démarrage du match.</li>
 </ol>
-<p class="status">Aucun serveur nécessaire. Les scores sont conservés sur cet appareil uniquement.</p>
+<p class="status">Les matchs et les résultats sont synchronisés en ligne avec Supabase. Retrouvez les informations depuis les appareils connectés.</p>
 </section>
 </div>
 </div>
