@@ -655,7 +655,7 @@ async function openBoard(n){
   if(latestRow) remoteBoards[selected]=latestRow;
   const existing=latestRow?.match_state||{};
   const inProgress=!!existing.matchStarted&&!existing.finished;
-  const inPreparation=!!existing.preparing&&!inProgress;
+  const inPreparation=!!existing.preparing&&!inProgress&&!existing.finished;
 
   // Une cible en préparation ou en cours est réservée à son appareil.
   // Un autre appareil doit saisir le code de cette cible pour la rejoindre.
@@ -701,6 +701,11 @@ async function openBoard(n){
 
   // Une cible libre devient réservée dès l'entrée dans les réglages.
   if(!inProgress){
+    // Toute nouvelle préparation repart d'un état non terminé.
+    state.finished=false;
+    state.winner=null;
+    state.resultSaved=false;
+    state.matchStarted=false;
     state.preparing=true;
     clearTimeout(saveTimer);
     saveTimer=null;
@@ -736,7 +741,7 @@ function renderLiveBoards() {
   const el=$('liveBoards'); if(!el)return; el.innerHTML=''; const selected=getSelectedOverviewBoards();
   if(!selected.length){el.innerHTML='<div class="muted">Aucune cible sélectionnée. Coche une ou plusieurs cibles ci-dessus.</div>';renderBoardFilters();return;}
   for(const n of selected){
-    const row=remoteBoards[String(n)],d=row?.match_state||{},inProgress=!!d.matchStarted&&!d.finished,preparing=!!d.preparing&&!inProgress;
+    const row=remoteBoards[String(n)],d=row?.match_state||{},inProgress=!!d.matchStarted&&!d.finished,preparing=!!d.preparing&&!inProgress&&!d.finished;
     const status=inProgress?`En cours · ${d.scores?.[0]??'—'} – ${d.scores?.[1]??'—'}`:preparing?'Préparation en cours':'Cible disponible pour un nouveau match';
     const names=(inProgress||preparing)&&Array.isArray(d.names)?d.names:['—','—'];
     const badgeClass=inProgress?'status-live':preparing?'status-prep':'status-free';
@@ -750,7 +755,7 @@ function renderLiveBoards() {
 function renderBoardPicker(){
   const el=$('boardPickerGrid'); if(!el)return; el.innerHTML='';
   for(let n=1;n<=8;n++){
-    const row=remoteBoards[String(n)],d=row?.match_state||{},inProgress=!!d.matchStarted&&!d.finished,preparing=!!d.preparing&&!inProgress;
+    const row=remoteBoards[String(n)],d=row?.match_state||{},inProgress=!!d.matchStarted&&!d.finished,preparing=!!d.preparing&&!inProgress&&!d.finished;
     const status=inProgress?`EN COURS · ${d.scores?.[0]??'—'} – ${d.scores?.[1]??'—'}`:preparing?'EN PRÉPARATION':'LIBRE';
     const names=(inProgress||preparing)&&Array.isArray(d.names)?d.names:['Aucun match',''];
     const playerLabel=(inProgress||preparing)?`${escapeHtml(names[0]||'Joueurs à choisir')} / ${escapeHtml(names[1]||'')}`:'Prête pour un nouveau match';
@@ -1308,17 +1313,19 @@ async function showPage(pageId){
  if(!allowed)pageId='overviewPage';
  if(['setupPage','gamePage'].includes(pageId)&&!activeBoard)pageId='overviewPage';
  const currentPage=document.querySelector('.page.active')?.id;
- // Quitter l'écran de préparation sans démarrer doit libérer immédiatement la cible.
- // Le passage de Préparation vers le score est exclu : il ne faut pas libérer un match.
- if(currentPage==='setupPage' && pageId!=='setupPage' && pageId!=='gamePage' && activeBoard && state.preparing && !state.matchStarted){
+ // Toute sortie de l'écran de réglage avant le démarrage annule la préparation.
+ // La destination gamePage est la seule exception : elle correspond au démarrage du match.
+ if(currentPage==='setupPage' && pageId!=='setupPage' && pageId!=='gamePage' && activeBoard && !state.matchStarted){
    clearTimeout(saveTimer);
    saveTimer=null;
    const leavingBoard=String(activeBoard);
    state.preparing=false;
+   state.matchStarted=false;
+   state.finished=false;
    const released=await saveBoardState(leavingBoard,snapshotForCloud());
    if(!released){
      state.preparing=true;
-     alert('Impossible de libérer la cible pour le moment. Vérifie la connexion puis réessaie.');
+     alert('Impossible de libérer la cible : la sauvegarde Supabase a échoué. Reste sur cet écran et réessaie.');
      return;
    }
    activeBoard='';
