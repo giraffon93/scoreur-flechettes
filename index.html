@@ -1284,6 +1284,8 @@ function getPlayerStats(playerIndex){
   // comme zéro point, mais les fléchettes lancées restent comptabilisées.
   for(const turn of state.history){
     if(Number(turn.playerIndex)!==playerIndex)continue;
+    // Les statistiques affichées concernent uniquement la manche en cours.
+    if(Number(turn.leg)!==state.legNo)continue;
     const count=Array.isArray(turn.darts)?turn.darts.length:0;
     dartsThrown+=count;
     if(turn.status!=='BUST') points+=Number(turn.total)||0;
