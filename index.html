@@ -250,6 +250,22 @@ nav button.active{
   *,*::before,*::after{scroll-behavior:auto!important;transition:none!important}
 }
 
+
+/* Résultats : cartes alignées, manches consultables séparément */
+.saved-match-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:stretch}
+.saved-match-summary{width:100%;height:100%;min-width:0;text-align:left;display:flex;flex-direction:column;justify-content:center;gap:5px}
+.saved-match-summary .match-head{width:100%;align-items:center}
+.saved-match-delete{width:46px;min-width:46px;height:100%;padding:8px;font-size:18px;display:grid;place-items:center}
+.results-stats-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:100%;align-items:stretch;margin:12px 0}
+.results-player-card{min-width:0;width:100%;min-height:92px;display:flex;flex-direction:column;justify-content:space-between;padding:12px;border:1px solid var(--line);border-radius:10px;background:#141820}
+.results-player-card .name{overflow-wrap:anywhere;min-height:1.4em}
+.results-player-card .player-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.results-player-card .player-stat{min-width:0;overflow-wrap:anywhere}
+.leg-history-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+.leg-history-tabs button{width:auto;min-width:110px}
+.leg-history-tabs button.active{background:var(--accent);color:#171717;border-color:var(--accent)}
+@media(max-width:520px){.saved-match-row{grid-template-columns:minmax(0,1fr) 42px}.saved-match-delete{width:42px;min-width:42px}.results-stats-grid{gap:7px}.results-player-card{padding:9px}.results-player-card .player-stat strong{font-size:16px}}
+
 </style>
 </head>
 <body>
@@ -1342,6 +1358,7 @@ function getSaved(){try{return JSON.parse(localStorage.getItem(savedStorageKey()
 let cloudSavedResults = [];
 let selectedHistoryMatch = null;
 let selectedHistoryMatchKey = null;
+let selectedHistoryLeg = null;
 function savedMatchKey(m){return String(m.id||[m.target||'',m.date||'',(m.names||[]).join('|'),(m.legs||[]).join('|'),m.winner||''].join('::'));}
 function getAllSavedMatches(){
  const all=[...cloudSavedResults];
@@ -1372,19 +1389,29 @@ function getFilteredSavedMatches(){
  return getAllSavedMatches().filter(m=>filter==='all'||String(m.target||activeBoard)===filter);
 }
 function renderSaved(){
- const el=$('savedMatches');if(!el)return;el.innerHTML='';
- const matches=getFilteredSavedMatches();
- if(!matches.length){el.innerHTML='<div class="muted">Aucun match enregistré pour ce filtre.</div>';selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSelectedMatchHistory(null);return}
- matches.forEach(m=>{
-  const div=document.createElement('button');div.type='button';div.className='match-card';div.style.textAlign='left';div.style.width='100%';
-  div.innerHTML=`<div class="match-head"><strong>${escapeHtml(m.names?.[0]||'Joueur 1')} ${m.legs?.[0]??0}–${m.legs?.[1]??0} ${escapeHtml(m.names?.[1]||'Joueur 2')}</strong><span class="tag">${escapeHtml(m.winner||(m.finished?'Terminé':'En cours'))}</span></div><div class="muted">Cible ${escapeHtml(m.target||'—')} · ${escapeHtml(m.date||'Date inconnue')} · départ ${m.start||501} · ${m.doubleIn?'Double In':'Simple In'} · ${m.doubleOut?'Double Out':'Sortie libre'}</div><div class="help" style="margin-top:6px">Cliquer pour voir les volées</div>`;
-  div.addEventListener('click',()=>{const key=savedMatchKey(m);if(selectedHistoryMatchKey===key){selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSelectedMatchHistory(null);}else{selectedHistoryMatch=m;selectedHistoryMatchKey=key;renderSelectedMatchHistory(m);}});
-  el.appendChild(div);
- });
- if(selectedHistoryMatchKey){
-  const latest=matches.find(m=>savedMatchKey(m)===selectedHistoryMatchKey);
-  if(latest){selectedHistoryMatch=latest;renderSelectedMatchHistory(latest);}else{selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSelectedMatchHistory(null);}
- }
+  const el=$('savedMatches');if(!el)return;el.innerHTML='';
+  const matches=getFilteredSavedMatches();
+  if(!matches.length){el.innerHTML='<div class="muted">Aucun match enregistré pour ce filtre.</div>';selectedHistoryMatch=null;selectedHistoryMatchKey=null;selectedHistoryLeg=null;renderSelectedMatchHistory(null);return;}
+  matches.forEach(m=>{
+   const row=document.createElement('div');row.className='saved-match-row';
+   const summary=document.createElement('button');summary.type='button';summary.className='match-card saved-match-summary';
+   summary.innerHTML=`<div class="match-head"><strong>${escapeHtml(m.names?.[0]||'Joueur 1')} ${m.legs?.[0]??0}–${m.legs?.[1]??0} ${escapeHtml(m.names?.[1]||'Joueur 2')}</strong><span class="tag">${escapeHtml(m.winner||(m.finished?'Terminé':'En cours'))}</span></div><div class="muted">Cible ${escapeHtml(m.target||'—')} · ${escapeHtml(m.date||'Date inconnue')} · départ ${m.start||501} · ${m.doubleIn?'Double In':'Simple In'} · ${m.doubleOut?'Double Out':'Sortie libre'}</div><div class="help">Cliquer pour consulter les manches</div>`;
+   summary.setAttribute('aria-expanded',String(selectedHistoryMatchKey===savedMatchKey(m)));
+   summary.addEventListener('click',()=>{
+    const key=savedMatchKey(m);
+    if(selectedHistoryMatchKey===key){selectedHistoryMatch=null;selectedHistoryMatchKey=null;selectedHistoryLeg=null;renderSelectedMatchHistory(null);}
+    else{selectedHistoryMatch=m;selectedHistoryMatchKey=key;selectedHistoryLeg=null;renderSelectedMatchHistory(m);}
+    renderSaved();
+   });
+   const del=document.createElement('button');del.type='button';del.className='danger saved-match-delete';del.textContent='🗑';del.title='Supprimer ce match';del.setAttribute('aria-label','Supprimer le match '+(m.names||[]).join(' contre '));del.disabled=!canManageResults();
+   del.addEventListener('click',()=>deleteSavedMatch(m));
+   row.append(summary,del);el.appendChild(row);
+  });
+  if(selectedHistoryMatchKey){
+   const latest=matches.find(m=>savedMatchKey(m)===selectedHistoryMatchKey);
+   if(latest){selectedHistoryMatch=latest;renderSelectedMatchHistory(latest);}
+   else{selectedHistoryMatch=null;selectedHistoryMatchKey=null;selectedHistoryLeg=null;renderSelectedMatchHistory(null);}
+  }
 }
 function getSavedPlayerStats(match, playerIndex){
  const turns=Array.isArray(match?.history)?match.history:[];
@@ -1401,25 +1428,61 @@ function getSavedPlayerStats(match, playerIndex){
  return {dartsThrown,average:dartsThrown?points/dartsThrown*3:0};
 }
 function renderSelectedMatchHistory(match){
- const wrap=$('historyDetails'),el=$('history');if(!el||!wrap)return;el.innerHTML='';
- if(!match){wrap.classList.add('hidden');return;}
- wrap.classList.remove('hidden');
- const label=$('historyMatchLabel');if(label)label.textContent=`Cible ${match.target||'—'} · ${match.names?.[0]||'Joueur 1'} ${match.legs?.[0]??0}–${match.legs?.[1]??0} ${match.names?.[1]||'Joueur 2'} · ${match.date||'Date inconnue'}`;
- const turns=Array.isArray(match.history)?match.history:[];
- const statsGrid=document.createElement('div');statsGrid.className='scores';
- for(let p=0;p<2;p++){
-  const stats=getSavedPlayerStats(match,p);
-  const card=document.createElement('div');card.className='player';
-  card.innerHTML=`<div class="name">${escapeHtml(match.names?.[p]||('Joueur '+(p+1)))}</div><div class="player-stats"><div class="player-stat">Moyenne / 3 fléchettes<strong>${stats.average.toLocaleString('fr-BE',{minimumFractionDigits:1,maximumFractionDigits:1})}</strong></div><div class="player-stat">Fléchettes lancées<strong>${stats.dartsThrown}</strong></div></div>`;
-  statsGrid.appendChild(card);
- }
- el.appendChild(statsGrid);
- if(!turns.length){el.insertAdjacentHTML('beforeend','<div class="muted">Aucune volée enregistrée pour ce match.</div>');return;}
- turns.forEach(t=>{
-  const div=document.createElement('div');div.className='history-row';
-  div.innerHTML=`<strong>${escapeHtml(t.player||'Joueur')}</strong> · ${(Array.isArray(t.darts)?t.darts:[]).map(escapeHtml).join(', ')}<div class="muted">${escapeHtml(t.status||'')} · ${t.before??'—'} → ${t.after??'—'} · volée : ${t.total??0} · manche ${t.leg??'—'}</div>`;
-  el.appendChild(div);
- });
+  const wrap=$('historyDetails'),el=$('history');if(!el||!wrap)return;el.innerHTML='';
+  if(!match){wrap.classList.add('hidden');return;}
+  wrap.classList.remove('hidden');
+  const label=$('historyMatchLabel');if(label)label.textContent=`Cible ${match.target||'—'} · ${match.names?.[0]||'Joueur 1'} ${match.legs?.[0]??0}–${match.legs?.[1]??0} ${match.names?.[1]||'Joueur 2'} · ${match.date||'Date inconnue'}`;
+  const turns=Array.isArray(match.history)?match.history:[];
+  const statsGrid=document.createElement('div');statsGrid.className='results-stats-grid';
+  for(let p=0;p<2;p++){
+   const stats=getSavedPlayerStats(match,p);
+   const card=document.createElement('div');card.className='results-player-card';
+   card.innerHTML=`<div class="name">${escapeHtml(match.names?.[p]||('Joueur '+(p+1)))}</div><div class="player-stats"><div class="player-stat">Moyenne / 3 fléchettes<strong>${stats.average.toLocaleString('fr-BE',{minimumFractionDigits:1,maximumFractionDigits:1})}</strong></div><div class="player-stat">Fléchettes lancées<strong>${stats.dartsThrown}</strong></div></div>`;
+   statsGrid.appendChild(card);
+  }
+  el.appendChild(statsGrid);
+  if(!turns.length){el.insertAdjacentHTML('beforeend','<div class="muted">Aucune volée enregistrée pour ce match.</div>');return;}
+  const legKeys=[...new Set(turns.map(t=>String(t.leg??'—')))].sort((a,b)=>{
+   if(a==='—')return 1;if(b==='—')return -1;return Number(a)-Number(b);
+  });
+  if(selectedHistoryLeg===null||!legKeys.includes(String(selectedHistoryLeg)))selectedHistoryLeg=legKeys[0];
+  const tabs=document.createElement('div');tabs.className='leg-history-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Choisir une manche');
+  legKeys.forEach(leg=>{
+   const tab=document.createElement('button');tab.type='button';tab.textContent=leg==='—'?'Manche inconnue':'Manche '+leg;
+   const active=String(selectedHistoryLeg)===leg;tab.classList.toggle('active',active);tab.setAttribute('role','tab');tab.setAttribute('aria-selected',String(active));
+   tab.addEventListener('click',()=>{selectedHistoryLeg=leg;renderSelectedMatchHistory(match);});
+   tabs.appendChild(tab);
+  });
+  el.appendChild(tabs);
+  turns.filter(t=>String(t.leg??'—')===String(selectedHistoryLeg)).forEach(t=>{
+   const div=document.createElement('div');div.className='history-row';
+   div.innerHTML=`<strong>${escapeHtml(t.player||'Joueur')}</strong> · ${(Array.isArray(t.darts)?t.darts:[]).map(escapeHtml).join(', ')}<div class="muted">${escapeHtml(t.status||'')} · ${t.before??'—'} → ${t.after??'—'} · volée : ${t.total??0} · manche ${t.leg??'—'}</div>`;
+   el.appendChild(div);
+  });
+}
+async function deleteSavedMatch(match){
+  if(!canManageResults()){$('resultsMessage').textContent='Permission Résultats requise pour supprimer un match.';return;}
+  const title=(match.names?.[0]||'Joueur 1')+' contre '+(match.names?.[1]||'Joueur 2');
+  if(!confirm('Supprimer définitivement le match « '+title+' » de la cible '+(match.target||'—')+' ?'))return;
+  const message=$('resultsMessage');
+  try{
+   if(supabase&&match.id){
+    const {error}=await supabase.from('dart_saved_results').delete().eq('id',match.id);
+    if(error)throw error;
+   }else if(!supabase){
+    throw new Error('Supabase indisponible : impossible de confirmer la suppression en ligne.');
+   }
+   for(let n=1;n<=8;n++){
+    const key='dartsSavedMatches_board_'+n;
+    try{const local=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(local))localStorage.setItem(key,JSON.stringify(local.filter(item=>String(item.id)!==String(match.id))));}catch(e){}
+   }
+   try{const key='dartsSavedMatches_board_none',legacy=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(legacy))localStorage.setItem(key,JSON.stringify(legacy.filter(item=>String(item.id)!==String(match.id))));}catch(e){}
+   if(selectedHistoryMatchKey===savedMatchKey(match)){selectedHistoryMatch=null;selectedHistoryMatchKey=null;selectedHistoryLeg=null;renderSelectedMatchHistory(null);}
+   await loadSavedResults();
+   if(message){message.textContent='Match supprimé : '+title+'.';message.style.color='#f1d27c';}
+  }catch(e){
+   if(message){message.textContent='Erreur pendant la suppression : '+(e?.message||String(e));message.style.color='#ff9b9b';}
+  }
 }
 async function saveMatch(){
  if(!canManageResults()){$('toast').textContent='Ton compte ne possède pas le droit de gérer les résultats.';return;}
@@ -1513,7 +1576,7 @@ $('finishMatch').addEventListener('click',async()=>{
 });
 $('undo').addEventListener('click',undo);
 $('reset').addEventListener('click',()=>{if(!canManageMatches()){$('toast').textContent='Ton compte ne possède pas le droit de gérer les matchs 501.';return;}if(confirm('Réinitialiser le match en cours ?')){settingsFromForm();state.legs=[0,0];state.legNo=1;state.history=[];state.matchStarted=true;freshLeg(state.legStarter);$('toast').textContent='Match réinitialisé.';render()}});
-$('resultsBoardFilter')?.addEventListener('change',()=>{selectedHistoryMatch=null;selectedHistoryMatchKey=null;renderSaved();const f=$('resultsBoardFilter').value;$('clearSaved').textContent=f==='all'?'Effacer les résultats de toutes les cibles':'Effacer les résultats de la cible '+f;});
+$('resultsBoardFilter')?.addEventListener('change',()=>{selectedHistoryMatch=null;selectedHistoryMatchKey=null;selectedHistoryLeg=null;renderSaved();const f=$('resultsBoardFilter').value;$('clearSaved').textContent=f==='all'?'Effacer les résultats de toutes les cibles':'Effacer les résultats de la cible '+f;});
 $('clearSaved').addEventListener('click',async()=>{
  const message=$('resultsMessage');
  const setResultsMessage=(text,isError=false)=>{
